@@ -92,13 +92,37 @@ public final class MsptHistory {
         return json.append(']').toString();
     }
 
-    /**
-     * A single performance measurement.
-     *
-     * @param timestampMillis moment of measurement
-     * @param mspt            average tick time
-     * @param tps             TPS
-     */
-    public record Sample(long timestampMillis, double mspt, double tps) {
+    /** A single performance measurement. */
+    public static final class Sample {
+
+        private final long timestampMillis;
+        private final double mspt;
+        private final double tps;
+
+        /**
+         * @param timestampMillis moment of measurement
+         * @param mspt            average tick time
+         * @param tps             TPS
+         */
+        public Sample(long timestampMillis, double mspt, double tps) {
+            this.timestampMillis = timestampMillis;
+            this.mspt = mspt;
+            this.tps = tps;
+        }
+
+        /** @return moment of measurement */
+        public long timestampMillis() {
+            return timestampMillis;
+        }
+
+        /** @return average tick time */
+        public double mspt() {
+            return mspt;
+        }
+
+        /** @return TPS */
+        public double tps() {
+            return tps;
+        }
     }
 }

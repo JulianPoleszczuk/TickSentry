@@ -36,40 +36,34 @@ import java.util.logging.Level;
  */
 public final class SqliteAlertStore implements AlertStore {
 
-    private static final String SCHEMA = """
-            CREATE TABLE IF NOT EXISTS incidents (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ts INTEGER NOT NULL,
-                tps REAL NOT NULL,
-                mspt REAL NOT NULL,
-                category TEXT NOT NULL,
-                world TEXT,
-                block_x INTEGER NOT NULL,
-                block_z INTEGER NOT NULL,
-                entities INTEGER NOT NULL,
-                dominant_type TEXT,
-                dominant_count INTEGER NOT NULL,
-                manual INTEGER NOT NULL
-            )
-            """;
+    private static final String SCHEMA =
+            "CREATE TABLE IF NOT EXISTS incidents ("
+            + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            + "ts INTEGER NOT NULL,"
+            + "tps REAL NOT NULL,"
+            + "mspt REAL NOT NULL,"
+            + "category TEXT NOT NULL,"
+            + "world TEXT,"
+            + "block_x INTEGER NOT NULL,"
+            + "block_z INTEGER NOT NULL,"
+            + "entities INTEGER NOT NULL,"
+            + "dominant_type TEXT,"
+            + "dominant_count INTEGER NOT NULL,"
+            + "manual INTEGER NOT NULL)";
 
     private static final String INDEX = "CREATE INDEX IF NOT EXISTS idx_incidents_ts ON incidents(ts)";
 
-    private static final String INSERT = """
-            INSERT INTO incidents
-                (ts, tps, mspt, category, world, block_x, block_z, entities, dominant_type, dominant_count, manual)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """;
+    private static final String COLUMNS =
+            "ts, tps, mspt, category, world, block_x, block_z, entities, dominant_type, dominant_count, manual";
 
-    private static final String SELECT_RECENT = """
-            SELECT ts, tps, mspt, category, world, block_x, block_z, entities, dominant_type, dominant_count, manual
-            FROM incidents ORDER BY ts DESC LIMIT ?
-            """;
+    private static final String INSERT =
+            "INSERT INTO incidents (" + COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-    private static final String SELECT_SINCE = """
-            SELECT ts, tps, mspt, category, world, block_x, block_z, entities, dominant_type, dominant_count, manual
-            FROM incidents WHERE ts >= ? ORDER BY ts DESC
-            """;
+    private static final String SELECT_RECENT =
+            "SELECT " + COLUMNS + " FROM incidents ORDER BY ts DESC LIMIT ?";
+
+    private static final String SELECT_SINCE =
+            "SELECT " + COLUMNS + " FROM incidents WHERE ts >= ? ORDER BY ts DESC";
 
     private final Plugin plugin;
     private final Connection connection;

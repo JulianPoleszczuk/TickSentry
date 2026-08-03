@@ -5,7 +5,7 @@ The whole run takes about 15 minutes.
 
 ## Before you start
 
-You need a Paper 1.20.6+ server and Java 21.
+You need a Paper 1.16.5+ server running on Java 11 or newer.
 
 1. Build the plugin: `./gradlew build`
 2. Copy `build/libs/TickSentry-1.0.0.jar` into the server's `plugins/` directory

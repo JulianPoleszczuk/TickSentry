@@ -215,24 +215,34 @@ public final class HotspotAnalyzer {
         Map.Entry<String, Integer> dominantEntity = stat.dominantEntityType();
         Map.Entry<String, Integer> dominantTile = stat.dominantTileType();
 
-        return switch (category) {
-            case MOB_FARM -> dominantEntity == null
-                    ? "Go there (" + tp + ") and see what piled up."
-                    : "Go there (" + tp + "). Suspected farm: " + dominantEntity.getValue() + "x "
-                    + friendly(dominantEntity.getKey()) + ". Quick fix: " + killCommand(stat, dominantEntity.getKey());
-            case ITEM_CLUTTER -> "Clear the dropped items: " + killCommand(stat, "item")
-                    + " (run " + tp + " first to see whose they are).";
-            case REDSTONE -> dominantTile == null
-                    ? "Check the redstone build at this spot (" + tp + ")."
-                    : "Check the redstone build (" + tp + "): " + dominantTile.getValue() + "x "
-                    + friendly(dominantTile.getKey()) + ". Hoppers are worth reducing or replacing with water streams.";
-            case PLAYER_CLUSTER -> "There are " + stat.playerCount()
-                    + " players in this chunk - if that is spawn or an event, the lag is expected. Check: " + tp + ".";
-            case ENTITY_OVERLOAD -> "A lot of mixed entities (" + stat.entityCount()
-                    + ") in one chunk. Take a look: " + tp + ".";
-            case UNKNOWN -> "No single chunk stands out - the cause may be outside the game world "
-                    + "(a plugin, world saving, terrain generation). Running the spark profiler is worth a try.";
-        };
+        switch (category) {
+            case MOB_FARM:
+                return dominantEntity == null
+                        ? "Go there (" + tp + ") and see what piled up."
+                        : "Go there (" + tp + "). Suspected farm: " + dominantEntity.getValue() + "x "
+                        + friendly(dominantEntity.getKey()) + ". Quick fix: "
+                        + killCommand(stat, dominantEntity.getKey());
+            case ITEM_CLUTTER:
+                return "Clear the dropped items: " + killCommand(stat, "item")
+                        + " (run " + tp + " first to see whose they are).";
+            case REDSTONE:
+                return dominantTile == null
+                        ? "Check the redstone build at this spot (" + tp + ")."
+                        : "Check the redstone build (" + tp + "): " + dominantTile.getValue() + "x "
+                        + friendly(dominantTile.getKey())
+                        + ". Hoppers are worth reducing or replacing with water streams.";
+            case PLAYER_CLUSTER:
+                return "There are " + stat.playerCount()
+                        + " players in this chunk - if that is spawn or an event, the lag is expected. Check: "
+                        + tp + ".";
+            case ENTITY_OVERLOAD:
+                return "A lot of mixed entities (" + stat.entityCount()
+                        + ") in one chunk. Take a look: " + tp + ".";
+            case UNKNOWN:
+            default:
+                return "No single chunk stands out - the cause may be outside the game world "
+                        + "(a plugin, world saving, terrain generation). Running the spark profiler is worth a try.";
+        }
     }
 
     /**

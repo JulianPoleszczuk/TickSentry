@@ -26,8 +26,22 @@ arrives on its own, with a ready-to-paste command.
 
 ## Requirements
 
-- Paper 1.20.6 or newer (built against API 1.20.6, `api-version: 1.20`)
-- Java 21
+- **Minecraft 1.16.5 up to the newest release** - Paper, Spigot or any fork of them
+- **Java 11 or newer**
+
+The plugin is built against the 1.16.5 API and compiled to Java 11 bytecode, so a single jar
+covers every version from 1.16.5 onwards. From 1.17 the Java requirement takes care of itself,
+because Minecraft itself demands a newer runtime:
+
+| Minecraft | Java required by the server | TickSentry |
+| --- | --- | --- |
+| 1.16.5 | 8+ (Paper recommends 11) | works on Java 11+ |
+| 1.17.x | 16+ | works |
+| 1.18 - 1.20.4 | 17+ | works |
+| 1.20.5 and newer | 21+ | works |
+
+The only case that will not run is a 1.16 server still on Java 8. Bumping such a server to
+Java 11 is recommended by Paper anyway.
 
 ## Building
 
@@ -36,6 +50,7 @@ arrives on its own, with a ready-to-paste command.
 ```
 
 The result lands in `build/libs/TickSentry-1.0.0.jar` - drop it into `plugins/` and restart.
+Building needs a JDK 21 toolchain, but the produced bytecode targets Java 11.
 
 ## Configuration
 

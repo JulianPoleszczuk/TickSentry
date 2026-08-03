@@ -12,12 +12,12 @@ repositories {
 }
 
 dependencies {
-    // Kompilujemy przeciw najniższej wspieranej wersji API (1.20.6), dzięki czemu
-    // gotowy jar działa zarówno na 1.20.6 jak i na wszystkich nowszych wydaniach Papera.
-    compileOnly("io.papermc.paper:paper-api:1.20.6-R0.1-SNAPSHOT")
+    // Built against the oldest supported API (1.16.5) so the finished jar runs on
+    // everything from 1.16.5 up to the newest Paper release.
+    compileOnly("com.destroystokyo.paper:paper-api:1.16.5-R0.1-SNAPSHOT")
 
-    // Obie biblioteki zostają poza jarem: sqlite-jdbc pobiera Paper przez `libraries` w plugin.yml,
-    // a PlaceholderAPI jest opcjonalną wtyczką na serwerze (soft-depend).
+    // Both libraries stay out of the jar: sqlite-jdbc is fetched by Paper through the
+    // `libraries` entry in plugin.yml, and PlaceholderAPI is an optional server plugin.
     compileOnly("org.xerial:sqlite-jdbc:3.47.1.0")
     compileOnly("me.clip:placeholderapi:2.11.6")
 
@@ -33,9 +33,16 @@ java {
 }
 
 tasks.withType<JavaCompile> {
-    // Paper od 1.20.6 wymaga Javy 21 na serwerze, wiec kompilacja do bytecode 21 nic nie ogranicza.
-    options.release = 21
+    // Bytecode 11 is the lowest that still covers Minecraft 1.16 servers (Paper recommends
+    // Java 11 there) while running fine on the Java 21 required by 1.20.5+. Going lower would
+    // mean giving up java.net.http and the collection factories for very little reach.
+    options.release = 11
     options.encoding = "UTF-8"
+}
+
+// The test sources may use modern syntax - they never ship inside the plugin jar.
+tasks.compileTestJava {
+    options.release = 21
 }
 
 tasks.processResources {

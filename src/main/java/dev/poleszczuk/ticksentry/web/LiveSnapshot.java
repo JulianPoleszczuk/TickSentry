@@ -8,37 +8,69 @@ import dev.poleszczuk.ticksentry.util.Json;
  * <p>The reason this class exists: an HTTP thread <b>must not</b> reach into the Bukkit API.
  * The snapshot is assembled by the main thread every few seconds, and the HTTP handler only
  * reads it.</p>
- *
- * @param tps          current TPS
- * @param mspt         average tick time
- * @param peakMs       longest freeze in the sample window
- * @param threshold    alert threshold from the configuration
- * @param players      number of players online
- * @param monitoring   whether the tick monitor is running
- * @param inIncident   whether an unfinished incident is in progress
- * @param incidents24h number of incidents in the last 24 hours
- * @param lastCategory cause of the last incident, or {@code null}
- * @param sparkSummary statistics from spark, or {@code null}
- * @param generatedAt  when the snapshot was taken
  */
-public record LiveSnapshot(
-        double tps,
-        double mspt,
-        double peakMs,
-        double threshold,
-        int players,
-        boolean monitoring,
-        boolean inIncident,
-        int incidents24h,
-        String lastCategory,
-        String sparkSummary,
-        long generatedAt
-) {
+public final class LiveSnapshot {
+
+    private final double tps;
+    private final double mspt;
+    private final double peakMs;
+    private final double threshold;
+    private final int players;
+    private final boolean monitoring;
+    private final boolean inIncident;
+    private final int incidents24h;
+    private final String lastCategory;
+    private final String sparkSummary;
+    private final long generatedAt;
+
+    /**
+     * @param tps          current TPS
+     * @param mspt         average tick time
+     * @param peakMs       longest freeze in the sample window
+     * @param threshold    alert threshold from the configuration
+     * @param players      number of players online
+     * @param monitoring   whether the tick monitor is running
+     * @param inIncident   whether an unfinished incident is in progress
+     * @param incidents24h number of incidents in the last 24 hours
+     * @param lastCategory cause of the last incident, or {@code null}
+     * @param sparkSummary statistics from spark, or {@code null}
+     * @param generatedAt  when the snapshot was taken
+     */
+    public LiveSnapshot(double tps, double mspt, double peakMs, double threshold, int players,
+                        boolean monitoring, boolean inIncident, int incidents24h, String lastCategory,
+                        String sparkSummary, long generatedAt) {
+        this.tps = tps;
+        this.mspt = mspt;
+        this.peakMs = peakMs;
+        this.threshold = threshold;
+        this.players = players;
+        this.monitoring = monitoring;
+        this.inIncident = inIncident;
+        this.incidents24h = incidents24h;
+        this.lastCategory = lastCategory;
+        this.sparkSummary = sparkSummary;
+        this.generatedAt = generatedAt;
+    }
 
     /** @return placeholder snapshot, used before the first real measurement exists */
     public static LiveSnapshot empty() {
         return new LiveSnapshot(20.0D, 0.0D, 0.0D, 50.0D, 0, false, false, 0, null, null,
                 System.currentTimeMillis());
+    }
+
+    /** @return average tick time */
+    public double mspt() {
+        return mspt;
+    }
+
+    /** @return current TPS */
+    public double tps() {
+        return tps;
+    }
+
+    /** @return when the snapshot was taken */
+    public long generatedAt() {
+        return generatedAt;
     }
 
     /**

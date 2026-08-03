@@ -18,6 +18,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
 
 /**
  * Handles {@code /lagwatch} - server health at a glance, without leaving the game.
@@ -54,12 +55,25 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
 
         String sub = args.length == 0 ? "status" : args[0].toLowerCase(Locale.ROOT);
         switch (sub) {
-            case "status" -> showStatus(sender);
-            case "report" -> showReport(sender, args.length > 1 && "discord".equalsIgnoreCase(args[1]));
-            case "history" -> showHistory(sender);
-            case "stats" -> showStats(sender, parseDays(args));
-            case "reload" -> reload(sender);
-            default -> sender.sendMessage(ChatColor.RED + "Usage: /" + label + " <status|report|history|stats|reload>");
+            case "status":
+                showStatus(sender);
+                break;
+            case "report":
+                showReport(sender, args.length > 1 && "discord".equalsIgnoreCase(args[1]));
+                break;
+            case "history":
+                showHistory(sender);
+                break;
+            case "stats":
+                showStats(sender, parseDays(args));
+                break;
+            case "reload":
+                reload(sender);
+                break;
+            default:
+                sender.sendMessage(ChatColor.RED + "Usage: /" + label
+                        + " <status|report|history|stats|reload>");
+                break;
         }
         return true;
     }
@@ -262,7 +276,7 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 1) {
             String prefix = args[0].toLowerCase(Locale.ROOT);
-            return SUBCOMMANDS.stream().filter(sub -> sub.startsWith(prefix)).toList();
+            return SUBCOMMANDS.stream().filter(sub -> sub.startsWith(prefix)).collect(Collectors.toList());
         }
         if (args.length == 2 && "report".equalsIgnoreCase(args[0])) {
             return List.of("discord");

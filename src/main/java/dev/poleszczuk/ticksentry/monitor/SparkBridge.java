@@ -94,7 +94,7 @@ public final class SparkBridge {
     private static double readDouble(Object target, String methodName) {
         try {
             Object value = target.getClass().getMethod(methodName).invoke(target);
-            return value instanceof Number number ? number.doubleValue() : Double.NaN;
+            return value instanceof Number ? ((Number) value).doubleValue() : Double.NaN;
         } catch (ReflectiveOperationException ex) {
             return Double.NaN;
         }
@@ -145,13 +145,30 @@ public final class SparkBridge {
         }
     }
 
-    /**
-     * Tick time distribution measured by spark.
-     *
-     * @param meanMs           average tick time over the last minute
-     * @param percentile95thMs tick time that 95% of ticks stay below
-     */
-    public record SparkStats(double meanMs, double percentile95thMs) {
+    /** Tick time distribution measured by spark. */
+    public static final class SparkStats {
+
+        private final double meanMs;
+        private final double percentile95thMs;
+
+        /**
+         * @param meanMs           average tick time over the last minute
+         * @param percentile95thMs tick time that 95% of ticks stay below
+         */
+        public SparkStats(double meanMs, double percentile95thMs) {
+            this.meanMs = meanMs;
+            this.percentile95thMs = percentile95thMs;
+        }
+
+        /** @return average tick time over the last minute */
+        public double meanMs() {
+            return meanMs;
+        }
+
+        /** @return tick time that 95% of ticks stay below */
+        public double percentile95thMs() {
+            return percentile95thMs;
+        }
 
         /** @return single-line description for chat and embeds */
         public String describe() {

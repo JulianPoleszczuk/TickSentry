@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.logging.Level;
 
 /**
@@ -227,7 +228,7 @@ public final class DiscordWebhookClient {
             embed.field("More precise measurement", event.sparkSummary(), false);
         }
 
-        List<ChunkStat> others = event.topChunks().stream().skip(1).limit(EXTRA_CHUNKS_SHOWN).toList();
+        List<ChunkStat> others = event.topChunks().stream().skip(1).limit(EXTRA_CHUNKS_SHOWN).collect(Collectors.toList());
         if (!others.isEmpty()) {
             StringBuilder list = new StringBuilder();
             for (ChunkStat stat : others) {
@@ -279,6 +280,6 @@ public final class DiscordWebhookClient {
                         .thenComparing(Map.Entry.comparingByKey()))
                 .limit(limit)
                 .map(entry -> entry.getValue() + "x " + entry.getKey().toLowerCase(Locale.ROOT).replace('_', ' '))
-                .toList();
+                .collect(Collectors.toList());
     }
 }

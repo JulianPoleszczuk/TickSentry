@@ -60,18 +60,24 @@ public final class TickSentryExpansion extends PlaceholderExpansion {
 
     @Override
     public String onRequest(OfflinePlayer player, @NotNull String params) {
-        return switch (params.toLowerCase(Locale.ROOT)) {
-            case "tps" -> String.format(Locale.ROOT, "%.1f", plugin.tickMonitor().tps());
-            case "mspt" -> String.format(Locale.ROOT, "%.1f", plugin.tickMonitor().averageMspt());
-            case "peak_ms" -> String.format(Locale.ROOT, "%.0f", plugin.tickMonitor().peakIntervalMs());
-            case "status" -> plugin.tickMonitor().isInIncident() ? "LAG" : "OK";
-            case "monitoring" -> plugin.tickMonitor().isRunning() ? "running" : "stopped";
-            case "incidents_24h" -> String.valueOf(plugin.incidentsLast24h());
-            case "last_category" -> {
+        switch (params.toLowerCase(Locale.ROOT)) {
+            case "tps":
+                return String.format(Locale.ROOT, "%.1f", plugin.tickMonitor().tps());
+            case "mspt":
+                return String.format(Locale.ROOT, "%.1f", plugin.tickMonitor().averageMspt());
+            case "peak_ms":
+                return String.format(Locale.ROOT, "%.0f", plugin.tickMonitor().peakIntervalMs());
+            case "status":
+                return plugin.tickMonitor().isInIncident() ? "LAG" : "OK";
+            case "monitoring":
+                return plugin.tickMonitor().isRunning() ? "running" : "stopped";
+            case "incidents_24h":
+                return String.valueOf(plugin.incidentsLast24h());
+            case "last_category":
                 LagCategory category = plugin.lastCategory();
-                yield category == null ? "none" : category.title();
-            }
-            default -> null;
-        };
+                return category == null ? "none" : category.title();
+            default:
+                return null;
+        }
     }
 }

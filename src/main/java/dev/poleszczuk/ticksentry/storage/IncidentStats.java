@@ -2,33 +2,75 @@ package dev.poleszczuk.ticksentry.storage;
 
 import dev.poleszczuk.ticksentry.monitor.LagCategory;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * Summary of incidents over a period - the answer to "when and why does this server lag".
- *
- * @param days       length of the analysed period, in days
- * @param total      number of incidents in that period
- * @param byCategory how many times each cause appeared
- * @param byHour     incident counts per hour of the day (index 0-23)
- * @param worst      incident with the worst tick time, or {@code null} when there is no data
  */
-public record IncidentStats(
-        int days,
-        int total,
-        Map<LagCategory, Integer> byCategory,
-        int[] byHour,
-        StoredIncident worst
-) {
+public final class IncidentStats {
+
+    private final int days;
+    private final int total;
+    private final Map<LagCategory, Integer> byCategory;
+    private final int[] byHour;
+    private final StoredIncident worst;
+
+    /**
+     * @param days       length of the analysed period, in days
+     * @param total      number of incidents in that period
+     * @param byCategory how many times each cause appeared
+     * @param byHour     incident counts per hour of the day (index 0-23)
+     * @param worst      incident with the worst tick time, or {@code null} when there is no data
+     */
+    public IncidentStats(int days, int total, Map<LagCategory, Integer> byCategory, int[] byHour,
+                         StoredIncident worst) {
+        this.days = days;
+        this.total = total;
+        // Copied key by key: the EnumMap(Map) constructor rejects an empty non-enum map,
+        // because it cannot work out which enum type it should hold.
+        Map<LagCategory, Integer> copy = new EnumMap<>(LagCategory.class);
+        copy.putAll(byCategory);
+        this.byCategory = Collections.unmodifiableMap(copy);
+        this.byHour = byHour.clone();
+        this.worst = worst;
+    }
 
     /**
      * @param days length of the period
      * @return empty result for a period without a single incident
      */
     public static IncidentStats empty(int days) {
-        return new IncidentStats(days, 0, Map.of(), new int[24], null);
+        return new IncidentStats(days, 0, new EnumMap<>(LagCategory.class), new int[24], null);
+    }
+
+    /** @return length of the analysed period, in days */
+    public int days() {
+        return days;
+    }
+
+    /** @return number of incidents in the period */
+    public int total() {
+        return total;
+    }
+
+    /** @return how many times each cause appeared */
+    public Map<LagCategory, Integer> byCategory() {
+        return byCategory;
+    }
+
+    /** @return incident counts per hour of the day */
+    public int[] byHour() {
+        return byHour.clone();
+    }
+
+    /** @return incident with the worst tick time, or {@code null} */
+    public StoredIncident worst() {
+        return worst;
     }
 
     /** @return most common cause, or {@code null} when there is no data */
@@ -67,15 +109,19 @@ public record IncidentStats(
             max = Math.max(max, count);
         }
         if (max == 0) {
-            return List.of();
+            return Collections.emptyList();
         }
-        List<String> lines = new java.util.ArrayList<>();
+        List<String> lines = new ArrayList<>();
         for (int hour = 0; hour < byHour.length; hour++) {
             if (byHour[hour] == 0) {
                 continue;
             }
             int bars = Math.max(1, Math.round(byHour[hour] * 20.0F / max));
-            lines.add(String.format("%02d:00 %s %d", hour, "|".repeat(bars), byHour[hour]));
+            StringBuilder bar = new StringBuilder(bars);
+            for (int i = 0; i < bars; i++) {
+                bar.append('|');
+            }
+            lines.add(String.format("%02d:00 %s %d", hour, bar, byHour[hour]));
         }
         return lines;
     }

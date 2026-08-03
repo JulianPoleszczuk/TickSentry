@@ -6,6 +6,7 @@ import dev.poleszczuk.ticksentry.monitor.LagEvent;
 import dev.poleszczuk.ticksentry.util.Json;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -13,32 +14,49 @@ import java.util.Map;
  *
  * <p>The full list of suspicious chunks is not stored - for history and statistics the main one
  * is enough. That way one incident is one row.</p>
- *
- * @param timestamp     when it was detected
- * @param tps           TPS at detection time
- * @param mspt          average tick time at detection time
- * @param category      guessed cause
- * @param world         world of the main suspect chunk, or {@code null}
- * @param blockX        block X coordinate of that chunk's centre
- * @param blockZ        block Z coordinate of that chunk's centre
- * @param entities      entity count in that chunk
- * @param dominantType  most common entity type, or {@code null}
- * @param dominantCount number of entities of the dominant type
- * @param manual        whether the incident came from a manual scan
  */
-public record StoredIncident(
-        Instant timestamp,
-        double tps,
-        double mspt,
-        LagCategory category,
-        String world,
-        int blockX,
-        int blockZ,
-        int entities,
-        String dominantType,
-        int dominantCount,
-        boolean manual
-) {
+public final class StoredIncident {
+
+    private final Instant timestamp;
+    private final double tps;
+    private final double mspt;
+    private final LagCategory category;
+    private final String world;
+    private final int blockX;
+    private final int blockZ;
+    private final int entities;
+    private final String dominantType;
+    private final int dominantCount;
+    private final boolean manual;
+
+    /**
+     * @param timestamp     when it was detected
+     * @param tps           TPS at detection time
+     * @param mspt          average tick time at detection time
+     * @param category      guessed cause
+     * @param world         world of the main suspect chunk, or {@code null}
+     * @param blockX        block X coordinate of that chunk's centre
+     * @param blockZ        block Z coordinate of that chunk's centre
+     * @param entities      entity count in that chunk
+     * @param dominantType  most common entity type, or {@code null}
+     * @param dominantCount number of entities of the dominant type
+     * @param manual        whether the incident came from a manual scan
+     */
+    public StoredIncident(Instant timestamp, double tps, double mspt, LagCategory category, String world,
+                          int blockX, int blockZ, int entities, String dominantType, int dominantCount,
+                          boolean manual) {
+        this.timestamp = timestamp;
+        this.tps = tps;
+        this.mspt = mspt;
+        this.category = category;
+        this.world = world;
+        this.blockX = blockX;
+        this.blockZ = blockZ;
+        this.entities = entities;
+        this.dominantType = dominantType;
+        this.dominantCount = dominantCount;
+        this.manual = manual;
+    }
 
     /**
      * Flattens a full incident into a storable row.
@@ -61,6 +79,61 @@ public record StoredIncident(
                 dominant == null ? null : dominant.getKey(),
                 dominant == null ? 0 : dominant.getValue(),
                 event.manual());
+    }
+
+    /** @return when the incident was detected */
+    public Instant timestamp() {
+        return timestamp;
+    }
+
+    /** @return TPS at detection time */
+    public double tps() {
+        return tps;
+    }
+
+    /** @return average tick time at detection time */
+    public double mspt() {
+        return mspt;
+    }
+
+    /** @return guessed cause */
+    public LagCategory category() {
+        return category;
+    }
+
+    /** @return world of the main suspect chunk, or {@code null} */
+    public String world() {
+        return world;
+    }
+
+    /** @return block X coordinate of the chunk centre */
+    public int blockX() {
+        return blockX;
+    }
+
+    /** @return block Z coordinate of the chunk centre */
+    public int blockZ() {
+        return blockZ;
+    }
+
+    /** @return entity count in the chunk */
+    public int entities() {
+        return entities;
+    }
+
+    /** @return most common entity type, or {@code null} */
+    public String dominantType() {
+        return dominantType;
+    }
+
+    /** @return number of entities of the dominant type */
+    public int dominantCount() {
+        return dominantCount;
+    }
+
+    /** @return whether the incident came from a manual scan */
+    public boolean manual() {
+        return manual;
     }
 
     /** @return readable location, or a note that there is none */
@@ -93,7 +166,7 @@ public record StoredIncident(
      * @param incidents list to serialise
      * @return JSON array ready for the dashboard
      */
-    public static String toJsonArray(java.util.List<StoredIncident> incidents) {
+    public static String toJsonArray(List<StoredIncident> incidents) {
         StringBuilder json = new StringBuilder("[");
         for (int i = 0; i < incidents.size(); i++) {
             if (i > 0) {
