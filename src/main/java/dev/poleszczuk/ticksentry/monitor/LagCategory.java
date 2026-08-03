@@ -21,6 +21,9 @@ public enum LagCategory {
     /** Many entities, but without one clearly dominant type. */
     ENTITY_OVERLOAD("Entity overload", "A large mix of different entities at once"),
 
+    /** The garbage collector or a full heap froze the server, not anything in the world. */
+    MEMORY("Memory / garbage collector", "The server ran out of breathing room in RAM"),
+
     /** No obvious culprit could be identified. */
     UNKNOWN("No obvious source", "No chunk stands out clearly");
 

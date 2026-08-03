@@ -7,6 +7,7 @@ import dev.poleszczuk.ticksentry.monitor.ChunkHotspotScanner;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
 import dev.poleszczuk.ticksentry.monitor.LagCategory;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
+import dev.poleszczuk.ticksentry.monitor.MemoryWatcher;
 import dev.poleszczuk.ticksentry.monitor.SparkBridge;
 import dev.poleszczuk.ticksentry.monitor.TickMonitor;
 import dev.poleszczuk.ticksentry.placeholders.TickSentryExpansion;
@@ -17,7 +18,9 @@ import dev.poleszczuk.ticksentry.storage.StoredIncident;
 import dev.poleszczuk.ticksentry.web.DashboardServer;
 import dev.poleszczuk.ticksentry.web.LiveSnapshot;
 import dev.poleszczuk.ticksentry.web.MsptHistory;
+import org.bukkit.ChatColor;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -46,12 +49,16 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** How many incidents the web panel shows. */
     private static final int DASHBOARD_INCIDENTS_SHOWN = 20;
 
+    /** How often (in ticks) memory and the garbage collector are read (5 seconds). */
+    private static final long MEMORY_POLL_TICKS = 20L * 5L;
+
     private ConfigManager configManager;
     private TickMonitor tickMonitor;
     private ChunkHotspotScanner scanner;
     private DiscordWebhookClient webhook;
     private AlertStore alertStore;
     private SparkBridge sparkBridge;
+    private MemoryWatcher memoryWatcher;
     private DashboardServer dashboard;
 
     private volatile int incidentsLast24h;
@@ -63,7 +70,8 @@ public final class TickSentryPlugin extends JavaPlugin {
         this.configManager = new ConfigManager(this);
         this.alertStore = openStore();
         this.sparkBridge = new SparkBridge(this);
-        this.scanner = new ChunkHotspotScanner(this, configManager, sparkBridge);
+        this.memoryWatcher = new MemoryWatcher(MEMORY_POLL_TICKS * 50L);
+        this.scanner = new ChunkHotspotScanner(this, configManager, sparkBridge, memoryWatcher);
         this.webhook = new DiscordWebhookClient(this, configManager);
         this.tickMonitor = new TickMonitor(this, configManager, this::handleSustainedLag, this::handleRecovery);
         this.tickMonitor.start();
@@ -77,6 +85,7 @@ public final class TickSentryPlugin extends JavaPlugin {
 
         registerPlaceholders();
         startDashboard();
+        getServer().getScheduler().runTaskTimer(this, memoryWatcher::poll, MEMORY_POLL_TICKS, MEMORY_POLL_TICKS);
         // First read after a second, so the panel and placeholders do not show zero for a whole minute.
         getServer().getScheduler().runTaskTimer(this, this::refreshCounters, 20L, COUNTER_REFRESH_TICKS);
 
@@ -215,8 +224,36 @@ public final class TickSentryPlugin extends JavaPlugin {
             getLogger().warning(" - " + stat.prettyLocation()
                     + " (entities: " + stat.entityCount() + ", block entities: " + stat.tileEntityCount() + ")");
         }
+        if (event.memoryNote() != null) {
+            getLogger().warning("Memory: " + event.memoryNote());
+        }
         getLogger().warning("Suggestion: " + event.suggestedAction());
         webhook.sendLagAlert(event);
+        announceInGame(event);
+    }
+
+    /**
+     * Tells admins who are online right now, so they do not have to be watching Discord.
+     * Only players holding {@code ticksentry.alerts} get the message.
+     */
+    private void announceInGame(LagEvent event) {
+        if (!configManager.inGameAlerts()) {
+            return;
+        }
+        ChunkStat primary = event.primaryChunk();
+        String where = primary == null
+                ? ""
+                : ChatColor.GRAY + " at " + ChatColor.WHITE + primary.prettyLocation()
+                  + ChatColor.DARK_GRAY + " (/tp " + primary.blockX() + " ~ " + primary.blockZ() + ")";
+
+        String headline = ChatColor.RED + "[TickSentry] " + ChatColor.YELLOW + "Server is lagging: "
+                + ChatColor.AQUA + event.category().title() + where;
+
+        for (Player player : getServer().getOnlinePlayers()) {
+            if (player.hasPermission("ticksentry.alerts")) {
+                player.sendMessage(headline);
+            }
+        }
     }
 
     /**
@@ -262,6 +299,11 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** @return the incident store (SQLite or in-memory) */
     public AlertStore alertStore() {
         return alertStore;
+    }
+
+    /** @return the memory and garbage collector watcher */
+    public MemoryWatcher memoryWatcher() {
+        return memoryWatcher;
     }
 
     /** @return the soft hook into spark (may be unavailable) */

@@ -32,6 +32,7 @@ public final class ConfigManager {
 
     private volatile boolean recoveryAlert;
     private volatile int recoverySeconds;
+    private volatile boolean inGameAlerts;
     private volatile boolean storageEnabled;
     private volatile int storageKeepDays;
 
@@ -64,6 +65,7 @@ public final class ConfigManager {
         this.rollingAverageTicks = Math.min(6000, Math.max(20, cfg.getInt("monitor.rolling-average-ticks", 100)));
         this.recoveryAlert = cfg.getBoolean("monitor.recovery-alert", true);
         this.recoverySeconds = Math.max(1, cfg.getInt("monitor.recovery-seconds", 15));
+        this.inGameAlerts = cfg.getBoolean("monitor.in-game-alerts", true);
 
         this.storageEnabled = cfg.getBoolean("storage.enabled", true);
         this.storageKeepDays = Math.max(0, cfg.getInt("storage.keep-days", 30));
@@ -142,6 +144,11 @@ public final class ConfigManager {
     /** @return how many seconds below the threshold end an incident */
     public int recoverySeconds() {
         return recoverySeconds;
+    }
+
+    /** @return whether admins in the game should be told about incidents */
+    public boolean inGameAlerts() {
+        return inGameAlerts;
     }
 
     /** @return whether incidents should be written to disk */

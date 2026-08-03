@@ -22,3 +22,8 @@ permissions:
   ticksentry.admin:
     description: Access to TickSentry commands.
     default: op
+    children:
+      ticksentry.alerts: true
+  ticksentry.alerts:
+    description: Receive lag alerts in the game chat.
+    default: op

@@ -16,6 +16,8 @@ monitor:
   recovery-alert: true
   # How many seconds below the threshold mean the lag is over.
   recovery-seconds: 15
+  # Also tell admins who are in the game? They need the ticksentry.alerts permission.
+  in-game-alerts: true
 
 discord:
   enabled: true

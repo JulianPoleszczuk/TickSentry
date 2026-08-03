@@ -20,7 +20,10 @@ Suggestion: Go there (/tp 1608 ~ 1608). Suspected farm: 841x cow.
   stays slow for a while.
 - Finds the chunk causing the problem and tells you what is in it.
 - Names the cause: a mob farm, dropped items, hoppers, a crowd of players, or too many entities.
+- Watches memory too, so it can tell you when the freeze came from the garbage collector or from
+  the server running out of RAM - things that counting mobs would never show.
 - Sends the alert to Discord, then sends a second message when the server is fine again.
+- Tells admins who are in the game, so you do not have to watch Discord.
 - Saves every incident, so you can ask what time of day your server usually struggles.
 - Has a small web page with a chart, if you want one.
 
@@ -52,7 +55,9 @@ Both ends were tested on real servers: Paper 1.16.5 on Java 11, and Paper 1.21.1
 
 ## Commands
 
-You need to be an operator (or have the `ticksentry.admin` permission).
+You need to be an operator (or have the `ticksentry.admin` permission). There is a second
+permission, `ticksentry.alerts`, which only decides who sees lag warnings in the game chat -
+handy if you want moderators warned without giving them the commands.
 
 | Command | What it does |
 | --- | --- |
@@ -80,6 +85,7 @@ monitor:
   rolling-average-ticks: 100 # how many ticks are averaged together
   recovery-alert: true       # send a message when the server is fine again
   recovery-seconds: 15       # how long it must stay fine before that message
+  in-game-alerts: true       # also tell admins who are online
 
 discord:
   enabled: true
@@ -175,6 +181,14 @@ These work if you have PlaceholderAPI installed:
 TickSentry looks at **what is inside your world**. It finds too many mobs, too many items, too
 many hoppers, and crowds of players.
 
+It also watches memory, so it can point at the garbage collector or a full heap:
+
+```
+Memory: The garbage collector used 24% of the last 5 s (8 collections).
+        The server was frozen for that time. Memory: 3900 MB of 4096 MB (95%).
+        The heap is nearly full, so give the server more RAM (-Xmx).
+```
+
 It **cannot** tell you that a badly written plugin is the problem, or that the lag comes from
 saving the world or generating new land. In those cases it says "No obvious source" and suggests
 you run [spark](https://spark.lucko.me/), which digs deeper.
@@ -231,7 +245,10 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 34 of them and none need a fake server.
+Run the tests with `./gradlew test`. There are 41 of them and none need a fake server.
+
+Every push runs the same build on GitHub Actions, which also checks that the jar is still Java 11
+bytecode - so nobody can break 1.16 support by accident.
 
 ## Licence
 

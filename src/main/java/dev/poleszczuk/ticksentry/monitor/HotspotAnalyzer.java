@@ -238,6 +238,9 @@ public final class HotspotAnalyzer {
             case ENTITY_OVERLOAD:
                 return "A lot of mixed entities (" + stat.entityCount()
                         + ") in one chunk. Take a look: " + tp + ".";
+            case MEMORY:
+                // The memory message itself carries the advice, so nothing to add here.
+                return "This one is not about the world - see the memory note below.";
             case UNKNOWN:
             default:
                 return "No single chunk stands out - the cause may be outside the game world "

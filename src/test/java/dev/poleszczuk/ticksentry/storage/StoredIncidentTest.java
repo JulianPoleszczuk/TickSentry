@@ -18,7 +18,7 @@ class StoredIncidentTest {
     @DisplayName("Flattening keeps the main chunk and the dominant type")
     void flattensPrimaryChunk() {
         ChunkStat farm = ChunkStat.ofEntities("world", 7, -3, Map.of("COW", 200, "PIG", 10));
-        LagEvent event = LagEvent.of(12.4D, 88.0D, 210.0D, 400, 5000, List.of(farm), 12L, false, null);
+        LagEvent event = LagEvent.of(12.4D, 88.0D, 210.0D, 400, 5000, List.of(farm), 12L, false, null, null);
 
         StoredIncident incident = StoredIncident.from(event);
 
@@ -36,7 +36,7 @@ class StoredIncidentTest {
     @Test
     @DisplayName("An incident without a suspect chunk stores no location")
     void handlesEventWithoutChunks() {
-        LagEvent event = LagEvent.of(15.0D, 70.0D, 120.0D, 300, 900, List.of(), 5L, true, null);
+        LagEvent event = LagEvent.of(15.0D, 70.0D, 120.0D, 300, 900, List.of(), 5L, true, null, null);
 
         StoredIncident incident = StoredIncident.from(event);
 

@@ -25,6 +25,7 @@ public final class LagEvent {
     private final long scanDurationMs;
     private final boolean manual;
     private final String sparkSummary;
+    private final String memoryNote;
 
     /**
      * @param timestamp       when it was detected
@@ -39,10 +40,11 @@ public final class LagEvent {
      * @param scanDurationMs  how long the chunk scan itself took
      * @param manual          whether the incident came from {@code /lagwatch report}
      * @param sparkSummary    extra statistics from spark, or {@code null} when spark is absent
+     * @param memoryNote      what memory and the garbage collector were doing, or {@code null}
      */
     public LagEvent(Instant timestamp, double tps, double averageMspt, double peakMs, int loadedChunks,
                     int totalEntities, List<ChunkStat> topChunks, LagCategory category, String suggestedAction,
-                    long scanDurationMs, boolean manual, String sparkSummary) {
+                    long scanDurationMs, boolean manual, String sparkSummary, String memoryNote) {
         this.timestamp = timestamp;
         this.tps = tps;
         this.averageMspt = averageMspt;
@@ -55,6 +57,7 @@ public final class LagEvent {
         this.scanDurationMs = scanDurationMs;
         this.manual = manual;
         this.sparkSummary = sparkSummary;
+        this.memoryNote = memoryNote;
     }
 
     /**
@@ -70,19 +73,27 @@ public final class LagEvent {
      * @param scanDurationMs scan duration
      * @param manual         whether the scan was manual
      * @param sparkSummary   spark statistics, or {@code null}
+     * @param memory         what memory looked like, or {@code null} when unknown
      * @return incident ready to be reported
      */
     public static LagEvent of(double tps, double averageMspt, double peakMs, int loadedChunks,
                               int totalEntities, List<ChunkStat> topChunks, long scanDurationMs,
-                              boolean manual, String sparkSummary) {
+                              boolean manual, String sparkSummary, MemoryAnalyzer.Verdict memory) {
         ChunkStat primary = topChunks.isEmpty() ? null : topChunks.get(0);
         LagCategory category = primary == null ? LagCategory.UNKNOWN : HotspotAnalyzer.categorize(primary);
-        String action = primary == null
+
+        // Nothing in the world stood out, but memory did - then memory is the answer.
+        if (category == LagCategory.UNKNOWN && memory != null && memory.explainsLag()) {
+            category = LagCategory.MEMORY;
+        }
+
+        String action = primary == null || category == LagCategory.MEMORY
                 ? HotspotAnalyzer.suggestedAction(
-                        ChunkStat.ofEntities("-", 0, 0, new HashMap<>()), LagCategory.UNKNOWN)
+                        ChunkStat.ofEntities("-", 0, 0, new HashMap<>()), category)
                 : HotspotAnalyzer.suggestedAction(primary, category);
         return new LagEvent(Instant.now(), tps, averageMspt, peakMs, loadedChunks, totalEntities,
-                topChunks, category, action, scanDurationMs, manual, sparkSummary);
+                topChunks, category, action, scanDurationMs, manual, sparkSummary,
+                memory == null ? null : memory.message());
     }
 
     /** @return when the incident was detected */
@@ -143,6 +154,11 @@ public final class LagEvent {
     /** @return extra statistics from spark, or {@code null} */
     public String sparkSummary() {
         return sparkSummary;
+    }
+
+    /** @return what memory and the garbage collector were doing, or {@code null} */
+    public String memoryNote() {
+        return memoryNote;
     }
 
     /** @return most suspicious chunk, or {@code null} when none stood out */
