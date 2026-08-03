@@ -11,48 +11,48 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EmbedBuilderTest {
 
     @Test
-    @DisplayName("Cudzyslowy i nowe linie sa escapowane")
+    @DisplayName("Quotes and newlines are escaped")
     void escapesSpecialCharacters() {
-        assertEquals("nazwa \\\"swiata\\\"", EmbedBuilder.escape("nazwa \"swiata\""));
+        assertEquals("the \\\"world\\\" name", EmbedBuilder.escape("the \"world\" name"));
         assertEquals("a\\nb", EmbedBuilder.escape("a\nb"));
-        assertEquals("C:\\\\serwer", EmbedBuilder.escape("C:\\serwer"));
+        assertEquals("C:\\\\server", EmbedBuilder.escape("C:\\server"));
         assertEquals("", EmbedBuilder.escape(null));
     }
 
     @Test
-    @DisplayName("Znaki sterujace ida jako sekwencje unicode")
+    @DisplayName("Control characters become unicode escapes")
     void escapesControlCharacters() {
         assertEquals("\\u0007", EmbedBuilder.escape("\u0007"));
     }
 
     @Test
-    @DisplayName("Pusty embed to poprawny obiekt JSON")
+    @DisplayName("An empty embed is still valid JSON")
     void emptyEmbedIsValidJson() {
         assertEquals("{}", new EmbedBuilder().toJson());
     }
 
     @Test
-    @DisplayName("Pola sa skladane w tablice bez zbednych przecinkow")
+    @DisplayName("Fields are joined into an array without stray commas")
     void buildsFullEmbed() {
         String json = new EmbedBuilder()
-                .title("Uwaga")
-                .description("Serwer laguje")
+                .title("Heads up")
+                .description("The server is lagging")
                 .color(0xE74C3C)
                 .field("TPS", "12.4", true)
-                .field("Gdzie", "world @ 8, 8", true)
+                .field("Where", "world @ 8, 8", true)
                 .footer("TickSentry")
                 .timestamp(Instant.parse("2026-08-03T10:15:30Z"))
                 .toJson();
 
-        assertEquals("{\"title\":\"Uwaga\",\"description\":\"Serwer laguje\",\"color\":15158332,"
+        assertEquals("{\"title\":\"Heads up\",\"description\":\"The server is lagging\",\"color\":15158332,"
                 + "\"fields\":[{\"name\":\"TPS\",\"value\":\"12.4\",\"inline\":true},"
-                + "{\"name\":\"Gdzie\",\"value\":\"world @ 8, 8\",\"inline\":true}],"
+                + "{\"name\":\"Where\",\"value\":\"world @ 8, 8\",\"inline\":true}],"
                 + "\"footer\":{\"text\":\"TickSentry\"},"
                 + "\"timestamp\":\"2026-08-03T10:15:30Z\"}", json);
     }
 
     @Test
-    @DisplayName("Czas trwania incydentu opisywany jest po ludzku")
+    @DisplayName("Incident duration is described in plain words")
     void formatsDuration() {
         assertEquals("45 s", DiscordWebhookClient.humanDuration(45L));
         assertEquals("2 min", DiscordWebhookClient.humanDuration(120L));
@@ -61,10 +61,10 @@ class EmbedBuilderTest {
     }
 
     @Test
-    @DisplayName("Zbyt dlugi opis jest przycinany do limitu Discorda")
+    @DisplayName("An over-long description is trimmed to the Discord limit")
     void truncatesLongDescription() {
         String json = new EmbedBuilder().description("x".repeat(5000)).toJson();
-        assertTrue(json.length() < 4100, "opis powinien zostac przyciety");
-        assertTrue(json.contains("..."), "przyciety tekst powinien konczyc sie wielokropkiem");
+        assertTrue(json.length() < 4100, "the description should be trimmed");
+        assertTrue(json.contains("..."), "trimmed text should end with an ellipsis");
     }
 }

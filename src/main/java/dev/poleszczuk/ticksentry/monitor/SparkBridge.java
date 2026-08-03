@@ -6,13 +6,13 @@ import org.bukkit.plugin.RegisteredServiceProvider;
 import java.lang.reflect.Method;
 
 /**
- * Opcjonalne wzbogacenie odczytow o dane z pluginu spark.
+ * Optional enrichment of the readings with data from the spark plugin.
  *
- * <p>Integracja jest w calosci refleksyjna, dzieki czemu TickSentry nie ma zadnej zaleznosci
- * kompilacyjnej ani runtime'owej od sparka - gdy go nie ma, plugin dziala bez zmian.
- * Spark udostepnia interfejs {@code me.lucko.spark.api.Spark} przez Bukkitowy ServicesManager;
- * bierzemy z niego rozklad czasu ticku (srednia i 95. percentyl) z ostatniej minuty, bo to
- * dokladniejszy obraz niz pojedyncza srednia krocząca.</p>
+ * <p>The integration is entirely reflective, so TickSentry has no compile-time or runtime
+ * dependency on spark - when spark is absent the plugin behaves exactly the same. Spark exposes
+ * {@code me.lucko.spark.api.Spark} through the Bukkit services manager; the bridge takes the
+ * tick time distribution over the last minute (mean and 95th percentile), which paints a more
+ * accurate picture than a single rolling average.</p>
  */
 public final class SparkBridge {
 
@@ -21,21 +21,21 @@ public final class SparkBridge {
     private boolean attemptedHook;
 
     /**
-     * @param plugin instancja pluginu (dostep do ServicesManagera i logu)
+     * @param plugin plugin instance (services manager and logging)
      */
     public SparkBridge(Plugin plugin) {
         this.plugin = plugin;
     }
 
-    /** @return {@code true}, jesli spark jest zainstalowany i jego API odpowiada */
+    /** @return {@code true} if spark is installed and its API responds */
     public boolean isAvailable() {
         return resolve() != null;
     }
 
     /**
-     * Pobiera rozklad czasu ticku z ostatniej minuty.
+     * Reads the tick time distribution over the last minute.
      *
-     * @return statystyki sparka albo {@code null}, gdy spark jest niedostepny lub zmienil API
+     * @return spark statistics, or {@code null} when spark is unavailable or its API changed
      */
     public SparkStats msptLastMinute() {
         Object instance = resolve();
@@ -57,35 +57,21 @@ public final class SparkBridge {
             double p95 = readDouble(info, "percentile95th");
             return Double.isNaN(mean) && Double.isNaN(p95) ? null : new SparkStats(mean, p95);
         } catch (ReflectiveOperationException | RuntimeException ex) {
-            // Spark zmienil API albo jest w trakcie wylaczania - integracja jest dodatkiem, wiec milczymy.
-            plugin.getLogger().fine("Nie udalo sie odczytac danych ze sparka: " + ex);
+            // Spark changed its API or is shutting down - this is a bonus feature, so stay quiet.
+            plugin.getLogger().fine("Could not read spark data: " + ex);
             return null;
         }
     }
 
     /**
-     * @return krotki opis danych ze sparka gotowy do pokazania adminowi albo {@code null}
+     * @return short description of the spark data, ready to show to an admin, or {@code null}
      */
     public String summary() {
         SparkStats stats = msptLastMinute();
         return stats == null ? null : stats.describe();
     }
 
-    /**
-     * Druga droga do sparka: statyczny {@code SparkProvider.get()}.
-     * Spark wbudowany w Papera nie rejestruje sie w ServicesManagerze, ale ustawia ten provider.
-     *
-     * @return instancja sparka albo {@code null}
-     */
-    private static Object staticProvider() {
-        try {
-            return Class.forName("me.lucko.spark.api.SparkProvider").getMethod("get").invoke(null);
-        } catch (ReflectiveOperationException | RuntimeException ex) {
-            return null;
-        }
-    }
-
-    /** Znajduje metode {@code poll} niezaleznie od wymazanego typu parametru okna. */
+    /** Finds the {@code poll} method regardless of the erased window parameter type. */
     private static Method pollMethod(Object statistic) throws NoSuchMethodException {
         for (Method method : statistic.getClass().getMethods()) {
             if ("poll".equals(method.getName()) && method.getParameterCount() == 1) {
@@ -129,34 +115,48 @@ public final class SparkBridge {
 
             if (spark == null) {
                 if (first) {
-                    plugin.getLogger().info("Spark jest obecny, ale jeszcze nie udostepnil API "
-                            + "- alerty korzystaja z wlasnych pomiarow.");
+                    plugin.getLogger().info("Spark is present but has not exposed its API yet "
+                            + "- alerts will use TickSentry's own measurements.");
                 }
                 return null;
             }
             if (first) {
-                plugin.getLogger().info("Wykryto spark - alerty beda wzbogacone o jego statystyki.");
+                plugin.getLogger().info("Spark detected - alerts will include its statistics.");
             }
         } catch (ClassNotFoundException | NoClassDefFoundError ignored) {
-            // Spark nie jest zainstalowany - calkowicie normalny przypadek, milczymy.
+            // Spark is not installed - a perfectly normal case.
         } catch (RuntimeException ex) {
-            plugin.getLogger().fine("Nie udalo sie podpiac pod spark: " + ex);
+            plugin.getLogger().fine("Could not hook into spark: " + ex);
         }
         return spark;
     }
 
     /**
-     * Rozklad czasu ticku zmierzony przez spark.
+     * Second route to spark: the static {@code SparkProvider.get()}.
+     * The spark build bundled with Paper does not register in the services manager but does set this provider.
      *
-     * @param meanMs           sredni czas ticku z ostatniej minuty
-     * @param percentile95thMs czas ticku, ponizej ktorego miesci sie 95% tickow
+     * @return spark instance, or {@code null}
+     */
+    private static Object staticProvider() {
+        try {
+            return Class.forName("me.lucko.spark.api.SparkProvider").getMethod("get").invoke(null);
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            return null;
+        }
+    }
+
+    /**
+     * Tick time distribution measured by spark.
+     *
+     * @param meanMs           average tick time over the last minute
+     * @param percentile95thMs tick time that 95% of ticks stay below
      */
     public record SparkStats(double meanMs, double percentile95thMs) {
 
-        /** @return jednolinijkowy opis dla czatu i embeda */
+        /** @return single-line description for chat and embeds */
         public String describe() {
             return String.format(java.util.Locale.ROOT,
-                    "spark: srednia %.1f ms, 95%% tickow ponizej %.1f ms", meanMs, percentile95thMs);
+                    "spark: mean %.1f ms, 95%% of ticks below %.1f ms", meanMs, percentile95thMs);
         }
     }
 }

@@ -1,10 +1,11 @@
 package dev.poleszczuk.ticksentry.commands;
 
 /**
- * Odmiana rzeczownikow po liczebniku wedlug zasad polskich.
+ * Tiny helper for pluralising nouns after a number.
  *
- * <p>Bez tego komunikaty wygladaja jak "1 incydentow". Regula: 1 to forma pojedyncza,
- * koncowki 2-4 (poza nastolatkami 12-14) to forma "few", reszta to dopelniacz mnogi.</p>
+ * <p>Without it messages read like "1 incidents". English only needs a singular and a plural
+ * form, so the rule is a one-liner - but keeping it in one place stops the check from being
+ * forgotten in half the messages.</p>
  */
 public final class Plural {
 
@@ -12,47 +13,36 @@ public final class Plural {
     }
 
     /**
-     * Skleja liczbe z poprawna forma rzeczownika.
+     * Joins a count with the matching noun form.
      *
-     * @param count liczba
-     * @param one   forma dla 1, np. "incydent"
-     * @param few   forma dla 2-4, np. "incydenty"
-     * @param many  forma dla pozostalych, np. "incydentow"
-     * @return liczba wraz z odmieniona forma, np. {@code "3 incydenty"}
+     * @param count  the number
+     * @param one    form used for exactly 1, e.g. "incident"
+     * @param many   form used for every other count, e.g. "incidents"
+     * @return the count followed by the right form, e.g. {@code "3 incidents"}
      */
-    public static String of(int count, String one, String few, String many) {
-        return count + " " + form(count, one, few, many);
+    public static String of(int count, String one, String many) {
+        return count + " " + form(count, one, many);
     }
 
     /**
-     * Wybiera sama forme rzeczownika, bez liczby.
+     * Picks the noun form alone, without the number.
      *
-     * @param count liczba
-     * @param one   forma dla 1
-     * @param few   forma dla 2-4
-     * @param many  forma dla pozostalych
-     * @return dopasowana forma
+     * @param count the number
+     * @param one   form used for exactly 1
+     * @param many  form used for every other count
+     * @return matching form
      */
-    public static String form(int count, String one, String few, String many) {
-        int abs = Math.abs(count);
-        if (abs == 1) {
-            return one;
-        }
-        int lastTwo = abs % 100;
-        if (lastTwo >= 12 && lastTwo <= 14) {
-            return many;
-        }
-        int last = abs % 10;
-        return last >= 2 && last <= 4 ? few : many;
+    public static String form(int count, String one, String many) {
+        return Math.abs(count) == 1 ? one : many;
     }
 
     /**
-     * Skrot dla najczestszego przypadku w tym pluginie.
+     * Shortcut for the case this plugin uses most often.
      *
-     * @param count liczba incydentow
-     * @return np. {@code "1 incydent"}, {@code "3 incydenty"}, {@code "12 incydentow"}
+     * @param count number of incidents
+     * @return e.g. {@code "1 incident"} or {@code "12 incidents"}
      */
     public static String incidents(int count) {
-        return of(count, "incydent", "incydenty", "incydentow");
+        return of(count, "incident", "incidents");
     }
 }

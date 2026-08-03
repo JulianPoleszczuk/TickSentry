@@ -1,196 +1,203 @@
 # TickSentry
 
-Plugin do Minecraft Paper, ktory w tle pilnuje wydajnosci serwera, sam zgaduje, **gdzie** siedzi
-przyczyna lagu, i wysyla o tym czytelny alert na Discorda.
+A Minecraft Paper plugin that watches server performance in the background, works out **where**
+the lag is coming from, and posts a readable alert to Discord.
 
-Przewaga nad spark to nie dokladnosc, tylko wygoda: nikt nie musi niczego odpalac ani czytac
-profilera. Alert przychodzi sam, z gotowa komenda do wklejenia.
+Its edge over spark is not depth of analysis - it is that nobody has to run anything. The alert
+arrives on its own, with a ready-to-paste command.
 
-## Co potrafi
+## What it does
 
-- Mierzy czas ticku (MSPT) i TPS co tick, na sredniej kroczacej - pojedynczy skok nie wywoluje alarmu.
-- Po nieprzerwanym przekroczeniu progu skanuje wszystkie zaladowane chunki i wskazuje top 5 podejrzanych.
-  Skan jest rozlozony na kolejne ticki z budzetem 3 ms na tick, wiec sam nie robi zwiechy.
-- Zgaduje przyczyne: farma mobow, zalegajace przedmioty, redstone/hoppery, skupisko graczy, ogolne przeciazenie encjami.
-- Wysyla embed na Discorda z koordynatami, przyczyna i sugerowana akcja - jezykiem admina, nie profilera.
-- Cooldown miedzy alertami (domyslnie 5 min), zeby nie zaspamowac kanalu.
-- Po ustaniu lagu wysyla osobna, zielona wiadomosc "serwer wrocil do normy" z czasem trwania incydentu.
-- Zapisuje incydenty do SQLite, wiec historia przezywa restart, a `/lagwatch stats` pokazuje,
-  o ktorej godzinie i przez co serwer laguje najczesciej.
-- Ma wbudowany **panel webowy** z wykresem czasu ticku i lista incydentow - bez hostingu,
-  bez zadnej uslugi zewnetrznej, wszystko dziala na maszynie z serwerem gry.
-- Jesli na serwerze jest **spark**, dokleja jego statystyki (srednia i 95. percentyl czasu ticku).
-- Jesli jest **PlaceholderAPI**, wystawia `%ticksentry_tps%`, `%ticksentry_mspt%` i kilka innych.
+- Measures tick time (MSPT) and TPS every tick using a rolling average, so a single spike never
+  triggers an alarm.
+- Once the threshold holds, scans every loaded chunk and names the five most suspicious ones.
+  The scan is spread across ticks with a 3 ms budget each, so it never stalls the server itself.
+- Guesses the cause: mob farm, dropped items, redstone/hoppers, player crowd, general entity overload.
+- Sends a Discord embed with coordinates, the cause and a suggested action - written for an admin,
+  not for a profiler user.
+- Cooldown between alerts (5 minutes by default) so the channel does not get spammed.
+- Posts a separate green "server is back to normal" message with the incident duration.
+- Stores incidents in SQLite, so history survives restarts and `/lagwatch stats` can show which
+  hour of the day the server struggles most.
+- Ships a **web panel** with a tick time chart and an incident list - no hosting, no external
+  service, everything runs on the machine that runs the server.
+- If **spark** is installed, adds its statistics (mean and 95th percentile tick time).
+- If **PlaceholderAPI** is installed, exposes `%ticksentry_tps%`, `%ticksentry_mspt%` and more.
 
-## Wymagania
+## Requirements
 
-- Paper 1.20.6 lub nowszy (plugin kompilowany przeciw API 1.20.6, `api-version: 1.20`)
+- Paper 1.20.6 or newer (built against API 1.20.6, `api-version: 1.20`)
 - Java 21
 
-## Budowanie
+## Building
 
 ```bash
 ./gradlew build
 ```
 
-Gotowy plik: `build/libs/TickSentry-1.0.0.jar` - wrzuc go do `plugins/` i zrestartuj serwer.
+The result lands in `build/libs/TickSentry-1.0.0.jar` - drop it into `plugins/` and restart.
 
-## Konfiguracja
+## Configuration
 
-Po pierwszym starcie powstanie `plugins/TickSentry/config.yml`:
+The first startup creates `plugins/TickSentry/config.yml`:
 
 ```yaml
 monitor:
-  mspt-threshold-ms: 50      # powyzej tylu ms serwer uznajemy za przeciazony
-  sustained-seconds: 10      # jak dlugo prog musi sie utrzymac, zanim poleci alert
-  scan-cooldown-seconds: 300 # minimalna przerwa miedzy alertami
-  rolling-average-ticks: 100 # okno sredniej kroczacej
-  recovery-alert: true       # wiadomosc po powrocie serwera do normy
-  recovery-seconds: 15       # ile spokoju oznacza koniec incydentu
+  mspt-threshold-ms: 50      # above this many ms the server counts as overloaded
+  sustained-seconds: 10      # how long the threshold must hold before an alert
+  scan-cooldown-seconds: 300 # minimum gap between alerts
+  rolling-average-ticks: 100 # rolling average window
+  recovery-alert: true       # message once the server recovers
+  recovery-seconds: 15       # how much calm ends an incident
 discord:
   enabled: true
   webhook-url: ""
-  mention-role-id: ""        # opcjonalne ID roli do oznaczenia (same cyfry)
+  mention-role-id: ""        # optional role id to ping (digits only)
 scan:
   ignored-worlds: []
   top-chunks-count: 5
 storage:
-  enabled: true              # false = historia tylko w pamieci, znika po restarcie
-  keep-days: 30              # po ilu dniach kasowac stare wpisy (0 = trzymaj wszystko)
+  enabled: true              # false = history in memory only, lost on restart
+  keep-days: 30              # delete entries older than this (0 = keep everything)
 dashboard:
-  enabled: false             # panel webowy w przegladarce
-  bind: "127.0.0.1"          # tylko z tego komputera; 0.0.0.0 wystawia na siec
+  enabled: false             # web panel in the browser
+  bind: "127.0.0.1"          # this machine only; 0.0.0.0 exposes it to the network
   port: 8080
-  token: ""                  # puste = plugin wygeneruje losowy i tu zapisze
+  token: ""                  # empty = the plugin generates one and writes it here
 ```
 
-## Panel webowy
+Get a webhook like this: channel settings on Discord → Integrations → Webhooks → New Webhook →
+copy the URL. Anyone holding that URL can post to your channel, so treat it like a password.
 
-Ustaw `dashboard.enabled: true` i zrestartuj serwer. W konsoli pojawi sie gotowy adres:
+## Commands
 
-```
-[TickSentry] Panel webowy: http://127.0.0.1:8080/?token=a15e51d7...
-```
+All of them require the `ticksentry.admin` permission (default: OP).
 
-Wklej go do przegladarki. Panel pokazuje TPS, czas ticku, najdluzsza zwieche, liczbe graczy,
-wykres czasu ticku z ostatniej godziny (z zaznaczonym progiem alarmowym) i tabele ostatnich
-incydentow. Odswieza sie sam co 2 sekundy.
-
-**Niczego nie trzeba hostowac.** Panel to serwer HTTP wbudowany w plugin (`HttpServer` z JDK),
-dzialajacy na tej samej maszynie co serwer gry. Nie ma centralnej uslugi, konta ani kosztow -
-kazdy, kto zainstaluje plugin, ma swoj wlasny panel.
-
-### Bezpieczenstwo
-
-Kazde zadanie musi podac token - w adresie (`?token=...`) albo w naglowku `X-Auth-Token`.
-Token jest generowany losowo przy pierwszym starcie i zapisywany w `config.yml`.
-
-**Polaczenie idzie czystym HTTP, bez szyfrowania.** Dlatego domyslnie panel nasluchuje tylko na
-`127.0.0.1`, czyli jest dostepny wylacznie z komputera, na ktorym stoi serwer. Zeby wejsc z
-innego urzadzenia, sa dwie bezpieczne drogi:
-
-1. **Tunel SSH** (najprostsza): `ssh -L 8080:127.0.0.1:8080 user@twoj-serwer`, potem wejdz na
-   `http://127.0.0.1:8080` u siebie.
-2. **Reverse proxy z HTTPS** (nginx, Caddy) przed panelem.
-
-Ustawienie `bind: "0.0.0.0"` wystawia panel na siec bez szyfrowania - token poleci wtedy
-otwartym tekstem i kazdy po drodze moze go przechwycic. Plugin ostrzega o tym w konsoli.
-
-Webhook zdobywasz tak: ustawienia kanalu na Discordzie -> Integracje -> Webhooki -> Utworz webhook -> kopiuj URL.
-
-## Komendy
-
-Wszystkie wymagaja uprawnienia `ticksentry.admin` (domyslnie: OP).
-
-| Komenda | Opis |
+| Command | What it does |
 | --- | --- |
-| `/lagwatch status` | biezacy TPS, czas ticku, stan monitoringu i cooldownu |
-| `/lagwatch report` | wymusza skan i wypisuje wynik w czacie |
-| `/lagwatch report discord` | to samo, ale wysyla tez na webhook (dobre do sprawdzenia konfiguracji) |
-| `/lagwatch history` | ostatnie incydenty, takze sprzed restartu serwera |
-| `/lagwatch stats [dni]` | podsumowanie: ile incydentow, przez co, o ktorej godzinie (domyslnie 7 dni) |
-| `/lagwatch reload` | przeladowuje `config.yml` |
+| `/lagwatch status` | current TPS, tick time, monitoring and cooldown state |
+| `/lagwatch report` | forces a scan and prints the result in chat |
+| `/lagwatch report discord` | the same, but also posts to the webhook (handy for checking the setup) |
+| `/lagwatch history` | recent incidents, including ones from before a restart |
+| `/lagwatch stats [days]` | summary: how many incidents, caused by what, at which hour (7 days by default) |
+| `/lagwatch reload` | reloads `config.yml` |
 
-Aliasy: `/ts`, `/ticksentry`.
+Aliases: `/ts`, `/ticksentry`.
 
-## Placeholdery (wymagaja PlaceholderAPI)
+## Placeholders (require PlaceholderAPI)
 
-| Placeholder | Zwraca |
+| Placeholder | Returns |
 | --- | --- |
-| `%ticksentry_tps%` | TPS, np. `19.9` |
-| `%ticksentry_mspt%` | sredni czas ticku w ms |
-| `%ticksentry_peak_ms%` | najdluzsza zwiecha w oknie pomiarowym |
-| `%ticksentry_status%` | `OK` albo `LAG` |
-| `%ticksentry_monitoring%` | `aktywny` albo `zatrzymany` |
-| `%ticksentry_last_category%` | przyczyna ostatniego incydentu |
-| `%ticksentry_incidents_24h%` | liczba incydentow z ostatniej doby |
+| `%ticksentry_tps%` | TPS, e.g. `19.9` |
+| `%ticksentry_mspt%` | average tick time in ms |
+| `%ticksentry_peak_ms%` | longest freeze in the sample window |
+| `%ticksentry_status%` | `OK` or `LAG` |
+| `%ticksentry_monitoring%` | `running` or `stopped` |
+| `%ticksentry_last_category%` | cause of the last incident |
+| `%ticksentry_incidents_24h%` | incidents in the last 24 hours |
 
-## Jak to sprawdzic u siebie
+## Web panel
 
-Pelna instrukcja krok po kroku jest w [TESTOWANIE.md](TESTOWANIE.md) - od zbudowania jara,
-przez wygenerowanie prawdziwego lagu 2000 krowami, po sprawdzenie panelu i alertu na Discordzie.
-Zajmuje okolo 15 minut.
+Set `dashboard.enabled: true` and restart. The console prints a ready address:
 
-W skrocie: ustaw `sustained-seconds: 3`, zrob `/lagwatch reload`, stan w jednym miejscu
-i podwajaj krowy komenda
+```
+[TickSentry] Web panel: http://127.0.0.1:8080/?token=a15e51d7...
+```
+
+Paste it into a browser. The panel shows TPS, tick time, longest freeze, player count, a chart of
+tick time over the last hour (with the alert threshold marked) and a table of recent incidents.
+It refreshes itself every 2 seconds.
+
+**Nothing needs hosting.** The panel is an HTTP server embedded in the plugin (`HttpServer` from
+the JDK) running on the same machine as the game server. There is no central service, no account
+and no cost - everyone who installs the plugin gets their own panel.
+
+### Security
+
+Every request must present a token, either in the address (`?token=...`) or in an `X-Auth-Token`
+header. The token is generated at random on first start and saved to `config.yml`.
+
+**The connection is plain HTTP, with no encryption.** That is why the panel listens on
+`127.0.0.1` by default, reachable only from the machine hosting the server. To reach it from
+another device there are two safe routes:
+
+1. **An SSH tunnel** (simplest): `ssh -L 8080:127.0.0.1:8080 user@your-server`, then open
+   `http://127.0.0.1:8080` locally.
+2. **A reverse proxy with HTTPS** (nginx, Caddy) in front of the panel.
+
+Setting `bind: "0.0.0.0"` exposes the panel to the network unencrypted - the token then travels
+in clear text and anyone in between can capture it. The plugin warns about this in the console.
+
+## Trying it out
+
+A full step-by-step guide lives in [TESTING.md](TESTING.md) - from building the jar, through
+generating real lag with 2000 cows, to checking the panel and the Discord alert. It takes about
+15 minutes.
+
+The short version: set `sustained-seconds: 3`, run `/lagwatch reload`, stand still and keep
+doubling cows with
 `/execute as @e[type=cow,distance=..10] at @s run summon minecraft:cow ~ ~ ~`.
-Alert powinien wskazac dokladnie ten chunk, w ktorym stoisz.
+The alert should point at exactly the chunk you are standing in.
 
-## Ograniczenia (swiadome, MVP)
+## Known limitations (deliberate)
 
-- Nie ma samplowania stosu wywolan jak w spark. Plugin koreluje wysoki MSPT z anomalna zawartoscia
-  chunkow, wiec **nie wykryje** lagu pochodzacego z pluginu, zapisu mapy czy generowania terenu -
-  w takim przypadku raportuje kategorie "Nieoczywiste zrodlo" i sugeruje odpalenie sparka.
-- Wagi kosztu encji i block-entity (`HotspotAnalyzer`) sa przyblizeniem, nie wynikiem profilowania.
-  Sa tak dobrane, zeby 40 hopperow wazylo wiecej niz 40 skrzyn, a 200 itemow mniej niz 200 villagerow.
-- Historia incydentow zyje w pamieci i znika po restarcie serwera.
+- There is no call-stack sampling like spark does. The plugin correlates high MSPT with anomalous
+  chunk contents, so it **will not** catch lag coming from a plugin, world saving or terrain
+  generation - in that case it reports the "No obvious source" category and suggests running spark.
+- The cost weights for entities and block entities (`HotspotAnalyzer`) are approximations, not
+  profiling results. They are tuned so that 40 hoppers outweigh 40 chests, and 200 dropped items
+  weigh less than 200 villagers.
 
-## Struktura
+## Layout
 
 ```
-com/../ticksentry
-├── TickSentryPlugin        spiecie calosci
+dev/poleszczuk/ticksentry
+├── TickSentryPlugin         wiring
 ├── monitor/
-│   ├── TickMonitor         pomiar MSPT/TPS co tick i detekcja trwalego przekroczenia
-│   ├── ChunkHotspotScanner odczyt chunkow z Bukkita (glowny watek)
-│   ├── ChunkStat           migawka chunka, bez zaleznosci od Bukkita
-│   ├── HotspotAnalyzer     wagi, ranking i kategoryzacja - cala logika, w pelni testowalna
-│   ├── LagCategory         kategorie przyczyn
-│   ├── LagEvent            incydent
-│   └── SparkBridge         opcjonalne dane ze sparka (refleksja)
+│   ├── TickMonitor          per-tick MSPT/TPS measurement and sustained-breach detection
+│   ├── ChunkHotspotScanner  reads chunks through Bukkit (main thread, spread across ticks)
+│   ├── ChunkStat            chunk snapshot, free of any Bukkit dependency
+│   ├── HotspotAnalyzer      weights, ranking and categorisation - all the logic, fully testable
+│   ├── LagCategory          the cause categories
+│   ├── LagEvent             one incident
+│   └── SparkBridge          optional data from spark (reflection)
 ├── discord/
-│   ├── DiscordWebhookClient wysylka async na osobnym watku
-│   └── EmbedBuilder         JSON embeda bez zadnej biblioteki
+│   ├── DiscordWebhookClient async delivery on its own thread
+│   └── EmbedBuilder         embed JSON without any library
 ├── commands/LagWatchCommand
 ├── config/ConfigManager
-├── placeholders/TickSentryExpansion  opcjonalne placeholdery PlaceholderAPI
-├── util/Json                niezbedne minimum do recznego skladania JSON-a
+├── placeholders/TickSentryExpansion  optional PlaceholderAPI placeholders
+├── util/Json                bare minimum for hand-rolled JSON
 ├── web/
-│   ├── DashboardServer      HttpServer z JDK, token, trzy endpointy
-│   ├── LiveSnapshot         migawka stanu skladana na glownym watku
-│   └── MsptHistory          bufor kolowy probek do wykresu
+│   ├── DashboardServer      JDK HttpServer, token auth, three endpoints
+│   ├── LiveSnapshot         state snapshot assembled on the main thread
+│   └── MsptHistory          ring buffer of chart samples
 └── storage/
-    ├── AlertStore           interfejs skladu incydentow
-    ├── SqliteAlertStore     zapis na dysk, cale I/O na osobnym watku
-    ├── MemoryAlertStore     zapas, gdy zapis wylaczony lub baza nie dziala
-    ├── StoredIncident       splaszczony incydent (jeden wiersz w bazie)
-    └── IncidentStats        podsumowanie okresu: przyczyny, rozklad dobowy
+    ├── AlertStore           incident store interface
+    ├── SqliteAlertStore     disk storage, all I/O on a separate thread
+    ├── MemoryAlertStore     fallback when storage is off or the database fails
+    ├── StoredIncident       flattened incident (one database row)
+    └── IncidentStats        period summary: causes, spread across the day
 ```
 
-Sterownik SQLite nie jest wbudowany w jar - deklaruje go `libraries` w `plugin.yml`,
-wiec Paper pobiera go sam przy pierwszym starcie. Jar zostaje przez to lekki (~60 KB)
-i nie ma konfliktow wersji z innymi pluginami.
+The SQLite driver is not bundled into the jar - it is declared under `libraries` in `plugin.yml`,
+so Paper fetches it on first start. That keeps the jar small (~60 KB) and avoids version clashes
+with other plugins.
 
-Testy jednostkowe (`./gradlew test`) pokrywaja logike oceny chunkow, budowanie JSON-a,
-statystyki i bufor probek - 35 testow, bez mockowania Bukkita.
+Unit tests (`./gradlew test`) cover the chunk scoring logic, JSON building, statistics and the
+sample buffer - 34 tests, with no Bukkit mocking.
 
-## Skad wziete progi
+## Where the thresholds come from
 
-Wagi i progi w `HotspotAnalyzer` byly kalibrowane na dzialajacym serwerze Paper 1.21.10:
+The weights and thresholds in `HotspotAnalyzer` were calibrated on a running Paper 1.21.10 server:
 
-- `MIN_INTERESTING_SCORE = 80` - przy 25 zwykly chunk z kilkudziesiecioma spadajacymi blokami
-  podczas generowania terenu dostawal etykiete "farma mobow".
-- `FALLING_BLOCK`, `ARROW`, `SNOWBALL` maja obnizone wagi - pojawiaja sie masowo, ale krotko.
-- Gracz wazy 5.0, bo trzyma zaladowane chunki wokol siebie i generuje ruch sieciowy.
+- `MIN_INTERESTING_SCORE = 80` - at 25, an ordinary chunk holding a few dozen falling blocks
+  during terrain generation was labelled a "mob farm".
+- `FALLING_BLOCK`, `ARROW` and `SNOWBALL` carry reduced weights - they appear in bulk but briefly.
+- A player weighs 5.0, because they keep chunks loaded around them and generate network traffic.
 
-Jesli na Twoim serwerze alerty sa zbyt czule albo zbyt gluche, to sa pierwsze miejsca do zmiany.
+If alerts feel too eager or too quiet on your server, those are the first knobs to turn.
+
+## Licence
+
+MIT - see [LICENSE](LICENSE).

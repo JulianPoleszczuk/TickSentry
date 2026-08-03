@@ -24,26 +24,26 @@ import java.io.File;
 import java.util.function.Consumer;
 
 /**
- * Punkt wejscia pluginu - spina konfiguracje, monitor tickow, sklad incydentow i alerty.
+ * Plugin entry point - wires together the config, the tick monitor, the incident store and alerts.
  */
 public final class TickSentryPlugin extends JavaPlugin {
 
-    /** Ile ostatnich incydentow pamieta zapasowy sklad w pamieci. */
+    /** How many recent incidents the in-memory fallback store keeps. */
     private static final int MEMORY_CAPACITY = 50;
 
-    /** Jak czesto (w tickach) odswiezany jest licznik incydentow na potrzeby placeholderow. */
+    /** How often (in ticks) the incident counter behind the placeholders is refreshed. */
     private static final long COUNTER_REFRESH_TICKS = 20L * 60L;
 
-    /** Co ile tickow zbierana jest probka do wykresu na dashboardzie (5 sekund). */
+    /** How often (in ticks) a chart sample is taken for the dashboard (5 seconds). */
     private static final long SAMPLE_TICKS = 20L * 5L;
 
-    /** Ile probek trzyma wykres - 720 probek co 5 s daje godzine historii. */
+    /** Chart sample capacity - 720 samples every 5 s covers one hour. */
     private static final int SAMPLE_CAPACITY = 720;
 
-    /** Co ile tickow odswiezana jest lista incydentow w panelu (30 sekund). */
+    /** How often (in ticks) the panel's incident list is refreshed (30 seconds). */
     private static final long DASHBOARD_INCIDENTS_TICKS = 20L * 30L;
 
-    /** Ile incydentow pokazuje panel webowy. */
+    /** How many incidents the web panel shows. */
     private static final int DASHBOARD_INCIDENTS_SHOWN = 20;
 
     private ConfigManager configManager;
@@ -77,13 +77,13 @@ public final class TickSentryPlugin extends JavaPlugin {
 
         registerPlaceholders();
         startDashboard();
-        // Pierwszy odczyt po sekundzie, zeby panel i placeholdery nie pokazywaly zera przez cala minute.
+        // First read after a second, so the panel and placeholders do not show zero for a whole minute.
         getServer().getScheduler().runTaskTimer(this, this::refreshCounters, 20L, COUNTER_REFRESH_TICKS);
 
-        getLogger().info("TickSentry aktywny - prog " + configManager.msptThresholdMs()
-                + " ms przez " + configManager.sustainedSeconds() + " s. Historia: " + alertStore.describe() + ".");
+        getLogger().info("TickSentry active - threshold " + configManager.msptThresholdMs()
+                + " ms for " + configManager.sustainedSeconds() + " s. History: " + alertStore.describe() + ".");
         if (!configManager.discordEnabled()) {
-            getLogger().info("Alerty na Discord sa wylaczone lub brak webhook-url w config.yml.");
+            getLogger().info("Discord alerts are disabled or webhook-url is missing from config.yml.");
         }
     }
 
@@ -104,8 +104,8 @@ public final class TickSentryPlugin extends JavaPlugin {
     }
 
     /**
-     * Otwiera sklad incydentow zgodnie z konfiguracja.
-     * Gdy zapis na dysk jest wylaczony albo baza nie da sie otworzyc, wracamy do historii w pamieci.
+     * Opens the incident store according to the configuration.
+     * When disk storage is off or the database cannot be opened, falls back to in-memory history.
      */
     private AlertStore openStore() {
         if (!configManager.storageEnabled()) {
@@ -116,27 +116,27 @@ public final class TickSentryPlugin extends JavaPlugin {
         return store != null ? store : new MemoryAlertStore(MEMORY_CAPACITY);
     }
 
-    /** Rejestruje placeholdery, jesli PlaceholderAPI jest na serwerze. */
+    /** Registers the placeholders if PlaceholderAPI is on the server. */
     private void registerPlaceholders() {
         if (getServer().getPluginManager().getPlugin("PlaceholderAPI") == null) {
             return;
         }
         try {
             new TickSentryExpansion(this).register();
-            getLogger().info("Zarejestrowano placeholdery %ticksentry_...%.");
+            getLogger().info("Registered the %ticksentry_...% placeholders.");
         } catch (RuntimeException | NoClassDefFoundError ex) {
-            getLogger().warning("Nie udalo sie zarejestrowac placeholderow: " + ex);
+            getLogger().warning("Could not register the placeholders: " + ex);
         }
     }
 
-    /** Odswieza licznik incydentow z ostatniej doby - placeholdery nie moga pytac bazy same. */
+    /** Refreshes the 24 h incident counter - placeholders cannot query the database themselves. */
     private void refreshCounters() {
         alertStore.stats(1, stats -> this.incidentsLast24h = stats.total());
     }
 
     /**
-     * Uruchamia panel webowy, jesli jest wlaczony w konfiguracji.
-     * Token generujemy przy pierwszym starcie i zapisujemy, zeby adres panelu byl staly.
+     * Starts the web panel when it is enabled in the configuration.
+     * The token is generated on first start and saved, so the panel address stays stable.
      */
     private void startDashboard() {
         if (!configManager.dashboardEnabled()) {
@@ -146,7 +146,7 @@ public final class TickSentryPlugin extends JavaPlugin {
         if (token.isEmpty()) {
             token = DashboardServer.generateToken();
             configManager.saveDashboardToken(token);
-            getLogger().info("Wygenerowano token panelu i zapisano go w config.yml.");
+            getLogger().info("Generated a panel token and saved it to config.yml.");
         }
 
         MsptHistory history = new MsptHistory(SAMPLE_CAPACITY);
@@ -157,11 +157,11 @@ public final class TickSentryPlugin extends JavaPlugin {
         this.dashboard = server;
 
         if (!"127.0.0.1".equals(configManager.dashboardBind()) && !"localhost".equals(configManager.dashboardBind())) {
-            getLogger().warning("Panel nasluchuje na " + configManager.dashboardBind()
-                    + " bez szyfrowania - token leci otwartym tekstem. Rozwaz tunel SSH albo proxy z HTTPS.");
+            getLogger().warning("The panel listens on " + configManager.dashboardBind()
+                    + " without encryption - the token travels in clear text. Consider an SSH tunnel or an HTTPS proxy.");
         }
 
-        // Migawki i probki zbiera glowny watek; handlery HTTP tylko je odczytuja.
+        // Snapshots and samples are taken by the main thread; HTTP handlers only read them.
         getServer().getScheduler().runTaskTimer(this, () -> {
             LiveSnapshot snapshot = collectSnapshot();
             history.add(snapshot.generatedAt(), snapshot.mspt(), snapshot.tps());
@@ -173,7 +173,7 @@ public final class TickSentryPlugin extends JavaPlugin {
                 20L, DASHBOARD_INCIDENTS_TICKS);
     }
 
-    /** Sklada migawke stanu serwera - wolno to robic wylacznie na glownym watku. */
+    /** Assembles the server state snapshot - only ever valid on the main thread. */
     private LiveSnapshot collectSnapshot() {
         return new LiveSnapshot(
                 tickMonitor.tps(),
@@ -189,44 +189,45 @@ public final class TickSentryPlugin extends JavaPlugin {
                 System.currentTimeMillis());
     }
 
-    /** Reakcja na trwale przekroczenie progu MSPT - zleca skan chunkow. */
+    /** Reaction to a sustained MSPT breach - schedules a chunk scan. */
     private void handleSustainedLag() {
         runScan(false, this::reportIncident);
     }
 
-    /** Reakcja na powrot serwera do normy po incydencie. */
+    /** Reaction to the server recovering after an incident. */
     private void handleRecovery(long durationSeconds) {
-        getLogger().info("Serwer wrocil do normy po " + durationSeconds + " s.");
+        getLogger().info("Server is back to normal after " + durationSeconds + " s.");
         if (configManager.recoveryAlert()) {
             webhook.sendRecovery(durationSeconds, tickMonitor.tps(), tickMonitor.averageMspt());
         }
     }
 
-    /** Zapisuje incydent, wypisuje go do logu serwera i wysyla na Discorda. */
+    /** Stores the incident, prints it to the server log and sends it to Discord. */
     private void reportIncident(LagEvent event) {
         alertStore.record(event);
         lastCategory = event.category();
         incidentsLast24h++;
 
         getLogger().warning(String.format(
-                "Wykryto trwaly lag: MSPT %.1f ms, TPS %.2f, najwiekszy skok %.0f ms. Przyczyna: %s.",
+                "Sustained lag detected: MSPT %.1f ms, TPS %.2f, longest freeze %.0f ms. Cause: %s.",
                 event.averageMspt(), event.tps(), event.peakMs(), event.category().title()));
         for (ChunkStat stat : event.topChunks()) {
             getLogger().warning(" - " + stat.prettyLocation()
-                    + " (encje: " + stat.entityCount() + ", block-entity: " + stat.tileEntityCount() + ")");
+                    + " (entities: " + stat.entityCount() + ", block entities: " + stat.tileEntityCount() + ")");
         }
-        getLogger().warning("Sugestia: " + event.suggestedAction());
+        getLogger().warning("Suggestion: " + event.suggestedAction());
         webhook.sendLagAlert(event);
     }
 
     /**
-     * Zleca skan chunkow z aktualnymi odczytami monitora.
+     * Schedules a chunk scan using the monitor's current readings.
      *
-     * <p>Skan jest rozlozony na kolejne ticki, wiec wynik przychodzi callbackiem, a nie zwrotka.</p>
+     * <p>The scan is spread across upcoming ticks, so the result arrives through a callback
+     * rather than as a return value.</p>
      *
-     * @param manual   czy skan zostal wywolany recznie komenda
-     * @param callback odbiorca gotowego incydentu (glowny watek)
-     * @return {@code false}, jesli inny skan juz trwa i zlecenie zostalo pominiete
+     * @param manual   whether the scan was triggered by a command
+     * @param callback receiver of the finished incident (main thread)
+     * @return {@code false} if another scan is already running and this request was skipped
      */
     public boolean runScan(boolean manual, Consumer<LagEvent> callback) {
         return scanner.startScan(tickMonitor.tps(), tickMonitor.averageMspt(),
@@ -234,46 +235,46 @@ public final class TickSentryPlugin extends JavaPlugin {
     }
 
     /**
-     * Zapisuje reczny raport w historii i aktualizuje liczniki.
+     * Records a manual report in the history and updates the counters.
      *
-     * @param event incydent z recznego skanu
+     * @param event incident from a manual scan
      */
     public void recordManual(LagEvent event) {
         alertStore.record(event);
         lastCategory = event.category();
     }
 
-    /** @return klient webhooka Discorda */
+    /** @return the Discord webhook client */
     public DiscordWebhookClient webhook() {
         return webhook;
     }
 
-    /** @return manager konfiguracji pluginu */
+    /** @return the plugin configuration manager */
     public ConfigManager configManager() {
         return configManager;
     }
 
-    /** @return dzialajacy monitor tickow */
+    /** @return the running tick monitor */
     public TickMonitor tickMonitor() {
         return tickMonitor;
     }
 
-    /** @return sklad incydentow (SQLite albo pamiec) */
+    /** @return the incident store (SQLite or in-memory) */
     public AlertStore alertStore() {
         return alertStore;
     }
 
-    /** @return miekkie podpiecie pod spark (moze byc niedostepne) */
+    /** @return the soft hook into spark (may be unavailable) */
     public SparkBridge sparkBridge() {
         return sparkBridge;
     }
 
-    /** @return liczba incydentow z ostatniej doby, odswiezana co minute */
+    /** @return number of incidents in the last 24 hours, refreshed once a minute */
     public int incidentsLast24h() {
         return incidentsLast24h;
     }
 
-    /** @return przyczyna ostatniego incydentu albo {@code null} */
+    /** @return cause of the last incident, or {@code null} */
     public LagCategory lastCategory() {
         return lastCategory;
     }

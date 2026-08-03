@@ -1,51 +1,51 @@
-# TickSentry - konfiguracja
-# Po zmianach uzyj /lagwatch reload
+# TickSentry configuration
+# After editing, run /lagwatch reload
 
 monitor:
-  # Sredni czas trwania ticku (MSPT), powyzej ktorego serwer uznajemy za przeciazony.
-  # Zdrowy serwer to zwykle 5-25 ms. 50 ms oznacza, ze serwer nie wyrabia sie z 20 TPS.
+  # Average tick time (MSPT) above which the server counts as overloaded.
+  # A healthy server usually sits at 5-25 ms. 50 ms means it can no longer hold 20 TPS.
   mspt-threshold-ms: 50
-  # Jak dlugo (w sekundach) prog musi byc przekroczony nieprzerwanie, zanim poleci alert.
-  # Chroni przed alertami na pojedyncze skoki (np. zapis swiata).
+  # How long (in seconds) the threshold must be exceeded without a break before an alert fires.
+  # Prevents alerts on single spikes, such as a world save.
   sustained-seconds: 10
-  # Minimalna przerwa miedzy kolejnymi alertami, zeby nie zaspamowac Discorda.
+  # Minimum gap between alerts, so the channel does not get spammed.
   scan-cooldown-seconds: 300
-  # Z ilu ostatnich tickow liczona jest srednia kroczaca.
+  # How many recent ticks the rolling average covers.
   rolling-average-ticks: 100
-  # Wyslac osobna wiadomosc, gdy serwer wroci do normy po incydencie?
+  # Send a separate message once the server recovers?
   recovery-alert: true
-  # Ile sekund serwer musi trzymac sie ponizej progu, zanim uznamy lag za zakonczony.
+  # How many seconds below the threshold mean the lag is over.
   recovery-seconds: 15
-
-storage:
-  # Zapisywac incydenty do pliku, zeby przetrwaly restart serwera?
-  # Przy false historia zyje tylko w pamieci.
-  enabled: true
-  # Po ilu dniach kasowac stare wpisy (0 = trzymaj wszystko).
-  keep-days: 30
-
-dashboard:
-  # Panel webowy z wykresem i lista incydentow, dostepny w przegladarce.
-  # Dziala na tej samej maszynie co serwer - nic nie trzeba nigdzie hostowac.
-  enabled: false
-  # UWAGA: polaczenie idzie czystym HTTP. Adres 127.0.0.1 oznacza dostep tylko z tego
-  # komputera - najbezpieczniejsze ustawienie. Zeby wejsc z innego urzadzenia, uzyj
-  # tunelu SSH albo postaw przed panelem reverse proxy z HTTPS. Wpisanie 0.0.0.0
-  # wystawia panel na siec bez szyfrowania, razem z tokenem.
-  bind: "127.0.0.1"
-  port: 8080
-  # Puste = plugin wygeneruje losowy token przy pierwszym starcie i zapisze go tutaj.
-  token: ""
 
 discord:
   enabled: true
-  # Ustawienia kanalu -> Integracje -> Webhooki -> Utworz webhook -> Kopiuj URL
+  # Channel settings -> Integrations -> Webhooks -> New Webhook -> Copy Webhook URL
   webhook-url: ""
-  # Opcjonalne ID roli, ktora zostanie oznaczona przy alercie (same cyfry, bez <@&>).
+  # Optional role id to ping on alert (digits only, without <@&>).
   mention-role-id: ""
 
 scan:
-  # Swiaty pomijane przy skanowaniu, np. ['world_the_end']
+  # Worlds skipped while scanning, e.g. ['world_the_end']
   ignored-worlds: []
-  # Ile najbardziej podejrzanych chunkow analizowac.
+  # How many of the most suspicious chunks to analyse.
   top-chunks-count: 5
+
+storage:
+  # Write incidents to a file so they survive a server restart?
+  # With false, the history only lives in memory.
+  enabled: true
+  # After how many days old entries are deleted (0 = keep everything).
+  keep-days: 30
+
+dashboard:
+  # Web panel with a chart and an incident list, viewable in a browser.
+  # It runs on the same machine as the server - nothing needs hosting anywhere.
+  enabled: false
+  # NOTE: the connection is plain HTTP. The address 127.0.0.1 means access from this
+  # computer only - the safest setting. To reach it from another device use an SSH
+  # tunnel or put a reverse proxy with HTTPS in front of it. Setting 0.0.0.0 exposes
+  # the panel to the network unencrypted, token included.
+  bind: "127.0.0.1"
+  port: 8080
+  # Empty = the plugin generates a random token on first start and writes it here.
+  token: ""

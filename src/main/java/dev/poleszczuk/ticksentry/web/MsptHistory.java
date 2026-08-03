@@ -6,11 +6,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Bufor kolowy z probkami wydajnosci, zasilajacy wykres na dashboardzie.
+ * Ring buffer of performance samples feeding the dashboard chart.
  *
- * <p>Probki dopisuje glowny watek serwera, a czyta je watek HTTP, dlatego obie operacje
- * sa zsynchronizowane. Bufor ma staly rozmiar - najstarsze probki wypadaja same,
- * wiec pamiec nie rosnie niezaleznie od tego, jak dlugo serwer chodzi.</p>
+ * <p>Samples are appended by the main server thread and read by an HTTP thread, so both
+ * operations are synchronised. The buffer has a fixed size - the oldest samples fall out on
+ * their own, so memory does not grow no matter how long the server runs.</p>
  */
 public final class MsptHistory {
 
@@ -23,7 +23,7 @@ public final class MsptHistory {
     private int size;
 
     /**
-     * @param capacity ile probek przechowywac
+     * @param capacity how many samples to keep
      */
     public MsptHistory(int capacity) {
         this.capacity = Math.max(1, capacity);
@@ -33,10 +33,10 @@ public final class MsptHistory {
     }
 
     /**
-     * Dopisuje probke, nadpisujac najstarsza po zapelnieniu bufora.
+     * Appends a sample, overwriting the oldest one once the buffer is full.
      *
-     * @param timestampMillis moment pomiaru
-     * @param msptValue       sredni czas ticku
+     * @param timestampMillis moment of measurement
+     * @param msptValue       average tick time
      * @param tpsValue        TPS
      */
     public synchronized void add(long timestampMillis, double msptValue, double tpsValue) {
@@ -49,19 +49,19 @@ public final class MsptHistory {
         }
     }
 
-    /** @return liczba przechowywanych probek */
+    /** @return number of stored samples */
     public synchronized int size() {
         return size;
     }
 
     /**
-     * Zwraca probki w kolejnosci chronologicznej.
+     * Returns the samples in chronological order.
      *
-     * @return lista probek od najstarszej do najnowszej
+     * @return list of samples from oldest to newest
      */
     public synchronized List<Sample> samples() {
         List<Sample> result = new ArrayList<>(size);
-        // Przy pelnym buforze najstarsza probka lezy tam, gdzie wskazuje kursor.
+        // Once the buffer is full, the oldest sample sits where the cursor points.
         int start = size < capacity ? 0 : cursor;
         for (int i = 0; i < size; i++) {
             int index = (start + i) % capacity;
@@ -71,9 +71,9 @@ public final class MsptHistory {
     }
 
     /**
-     * Serializuje probki do tablicy JSON gotowej dla wykresu.
+     * Serialises the samples into a JSON array ready for the chart.
      *
-     * @return fragment JSON-a, np. {@code [{"t":123,"mspt":8.1,"tps":20.0}]}
+     * @return JSON fragment, for example {@code [{"t":123,"mspt":8.1,"tps":20.0}]}
      */
     public String toJsonArray() {
         List<Sample> samples = samples();
@@ -93,10 +93,10 @@ public final class MsptHistory {
     }
 
     /**
-     * Pojedynczy pomiar wydajnosci.
+     * A single performance measurement.
      *
-     * @param timestampMillis moment pomiaru
-     * @param mspt            sredni czas ticku
+     * @param timestampMillis moment of measurement
+     * @param mspt            average tick time
      * @param tps             TPS
      */
     public record Sample(long timestampMillis, double mspt, double tps) {

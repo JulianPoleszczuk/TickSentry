@@ -8,17 +8,17 @@ import org.bukkit.scheduler.BukkitTask;
 import java.util.function.LongConsumer;
 
 /**
- * Mierzy kondycje serwera co tick i zglasza trwale przeciazenie.
+ * Measures server health every tick and reports sustained overload.
  *
- * <p>Jako MSPT uzywany jest {@link Server#getAverageTickTime()} - to faktyczny czas
- * wykonania ticku (zdrowy serwer: 5-25 ms). Odstep miedzy wywolaniami zadania
- * mierzony {@code System.nanoTime()} sluzy osobno do wykrywania chwilowych zwiech:
- * przy zdrowym serwerze wynosi on zawsze ~50 ms, wiec nie nadaje sie na prog alarmowy,
- * ale jego szczytowa wartosc dobrze pokazuje skale najwiekszego zacieca w oknie.</p>
+ * <p>MSPT comes from {@link Server#getAverageTickTime()} - the actual tick execution time
+ * (a healthy server sits at 5-25 ms). The gap between task invocations, measured with
+ * {@code System.nanoTime()}, is tracked separately to catch momentary freezes: on a healthy
+ * server that gap is always ~50 ms, so it makes a useless alert threshold, but its peak value
+ * shows nicely how bad the worst stall in the window was.</p>
  */
 public final class TickMonitor implements Runnable {
 
-    /** Docelowy odstep miedzy tickami przy 20 TPS. */
+    /** Target gap between ticks at 20 TPS. */
     private static final double TARGET_TICK_MS = 50.0D;
 
     private final Plugin plugin;
@@ -42,10 +42,10 @@ public final class TickMonitor implements Runnable {
     private long recoveryStartMillis = -1L;
 
     /**
-     * @param plugin         instancja pluginu (uzywana do schedulera)
-     * @param config         zrodlo progow i okien czasowych
-     * @param onSustainedLag akcja wywolywana na glownym watku po wykryciu trwalego lagu
-     * @param onRecovered    akcja wywolywana po powrocie do normy, z czasem trwania incydentu w sekundach
+     * @param plugin         plugin instance (used for the scheduler)
+     * @param config         source of thresholds and time windows
+     * @param onSustainedLag action run on the main thread once sustained lag is detected
+     * @param onRecovered    action run once the server recovers, with the incident length in seconds
      */
     public TickMonitor(Plugin plugin, ConfigManager config, Runnable onSustainedLag, LongConsumer onRecovered) {
         this.plugin = plugin;
@@ -56,14 +56,14 @@ public final class TickMonitor implements Runnable {
         resizeWindow();
     }
 
-    /** Uruchamia pomiar - zadanie synchroniczne wykonywane co tick. */
+    /** Starts measuring - a synchronous task running every tick. */
     public void start() {
         if (task == null) {
             task = server.getScheduler().runTaskTimer(plugin, this, 1L, 1L);
         }
     }
 
-    /** Zatrzymuje pomiar i zwalnia zadanie schedulera. */
+    /** Stops measuring and releases the scheduler task. */
     public void stop() {
         if (task != null) {
             task.cancel();
@@ -71,14 +71,14 @@ public final class TickMonitor implements Runnable {
         }
     }
 
-    /** @return {@code true} jesli monitor jest aktualnie uruchomiony */
+    /** @return {@code true} if the monitor is currently running */
     public boolean isRunning() {
         return task != null;
     }
 
     /**
-     * Czysci zebrane probki i resetuje stan wykrywania.
-     * Wywolywane po przeladowaniu konfiguracji, bo moglo zmienic sie okno sredniej.
+     * Clears collected samples and resets detection state.
+     * Called after a config reload, because the averaging window may have changed.
      */
     public void reset() {
         resizeWindow();
@@ -103,14 +103,14 @@ public final class TickMonitor implements Runnable {
             filled++;
         }
 
-        // Dopoki okno nie jest pelne, srednia jest niemiarodajna (np. tuz po starcie serwera).
+        // Until the window is full the average means little - for example right after startup.
         if (filled < msptSamples.length) {
             return;
         }
         evaluate();
     }
 
-    /** Sprawdza, czy prog jest przekroczony wystarczajaco dlugo, i ewentualnie odpala alert. */
+    /** Checks whether the threshold has been exceeded long enough and fires an alert if so. */
     private void evaluate() {
         long nowMillis = System.currentTimeMillis();
         if (averageMspt() <= config.msptThresholdMs()) {
@@ -119,7 +119,7 @@ public final class TickMonitor implements Runnable {
             return;
         }
 
-        // Serwer znowu przekracza prog - ewentualne odliczanie do "wrocil do normy" zaczyna sie od zera.
+        // Back above the threshold - any countdown towards "recovered" starts from scratch.
         recoveryStartMillis = -1L;
 
         if (breachStartMillis < 0L) {
@@ -131,14 +131,14 @@ public final class TickMonitor implements Runnable {
             return;
         }
 
-        // Incydent liczymy od momentu pierwszego przekroczenia progu, nie od chwili wyslania alertu.
+        // An incident starts when the threshold was first crossed, not when the alert goes out.
         if (!inIncident) {
             inIncident = true;
             incidentStartMillis = breachStartMillis;
         }
 
-        // Prog trzyma sie wystarczajaco dlugo - liczymy okno od nowa niezaleznie od cooldownu,
-        // zeby po jego wygasnieciu alert wymagal ponownie pelnego okresu przeciazenia.
+        // The threshold held long enough - restart the window regardless of the cooldown, so that
+        // once the cooldown expires an alert still requires a full period of overload.
         breachStartMillis = nowMillis;
 
         if (nowMillis - lastAlertMillis < config.scanCooldownSeconds() * 1000L) {
@@ -149,13 +149,13 @@ public final class TickMonitor implements Runnable {
         try {
             onSustainedLag.run();
         } catch (RuntimeException ex) {
-            plugin.getLogger().warning("Blad podczas obslugi wykrytego lagu: " + ex);
+            plugin.getLogger().warning("Error while handling detected lag: " + ex);
         }
     }
 
     /**
-     * Pilnuje, czy trwajacy incydent juz sie skonczyl.
-     * Wymagamy calego okna spokoju, zeby nie oglaszac powrotu do normy przy chwilowym oddechu serwera.
+     * Watches whether an ongoing incident has ended.
+     * A full quiet window is required, so a momentary breather is not announced as a recovery.
      */
     private void checkRecovery(long nowMillis) {
         if (!inIncident) {
@@ -177,16 +177,16 @@ public final class TickMonitor implements Runnable {
         try {
             onRecovered.accept(durationSeconds);
         } catch (RuntimeException ex) {
-            plugin.getLogger().warning("Blad podczas obslugi powrotu do normy: " + ex);
+            plugin.getLogger().warning("Error while handling recovery: " + ex);
         }
     }
 
-    /** @return {@code true}, jesli trwa niezakonczony incydent lagu */
+    /** @return {@code true} if an unfinished lag incident is in progress */
     public boolean isInIncident() {
         return inIncident;
     }
 
-    /** @return srednia krocząca MSPT z okna pomiarowego, w milisekundach */
+    /** @return rolling average MSPT over the sample window, in milliseconds */
     public double averageMspt() {
         if (filled == 0) {
             return 0.0D;
@@ -198,7 +198,7 @@ public final class TickMonitor implements Runnable {
         return sum / filled;
     }
 
-    /** @return najdluzszy odstep miedzy tickami w oknie pomiarowym, w milisekundach */
+    /** @return longest gap between ticks in the sample window, in milliseconds */
     public double peakIntervalMs() {
         double peak = 0.0D;
         for (int i = 0; i < filled; i++) {
@@ -207,25 +207,25 @@ public final class TickMonitor implements Runnable {
         return peak;
     }
 
-    /** @return TPS z ostatniej minuty, przyciete do maksymalnie 20.0 */
+    /** @return one-minute TPS, capped at 20.0 */
     public double tps() {
         double[] tps = server.getTPS();
         return tps.length == 0 ? 20.0D : Math.min(20.0D, tps[0]);
     }
 
-    /** @return jak dlugo (w sekundach) prog MSPT jest nieprzerwanie przekroczony; 0 gdy serwer jest zdrowy */
+    /** @return how long (in seconds) the MSPT threshold has been continuously exceeded; 0 when healthy */
     public long currentBreachSeconds() {
         return breachStartMillis < 0L ? 0L : (System.currentTimeMillis() - breachStartMillis) / 1000L;
     }
 
-    /** @return liczba sekund pozostalych do konca cooldownu alertow; 0 gdy alert moze polecec od razu */
+    /** @return seconds left of the alert cooldown; 0 when an alert can fire immediately */
     public long alertCooldownRemainingSeconds() {
         long elapsed = System.currentTimeMillis() - lastAlertMillis;
         long cooldown = config.scanCooldownSeconds() * 1000L;
         return elapsed >= cooldown ? 0L : (cooldown - elapsed) / 1000L;
     }
 
-    /** Odnotowuje, ze alert wlasnie zostal wyslany - resetuje cooldown (uzywane przy alertach recznych). */
+    /** Records that an alert has just been sent - resets the cooldown (used for manual alerts). */
     public void markAlertSent() {
         lastAlertMillis = System.currentTimeMillis();
     }

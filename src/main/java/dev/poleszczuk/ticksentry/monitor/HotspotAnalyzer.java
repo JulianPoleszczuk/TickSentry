@@ -7,49 +7,49 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Ocenia i porzadkuje migawki chunkow oraz zgaduje przyczyne lagu.
+ * Scores and ranks chunk snapshots, then guesses what is causing the lag.
  *
- * <p>Cala klasa jest czysta (bez Bukkita i bez stanu), zeby dalo sie ja pokryc testami
- * jednostkowymi. To tutaj mieszka jedyna "inteligencja" pluginu: wagi kosztu obiektow
- * i progi decydujace o kategorii.</p>
+ * <p>The whole class is pure - no Bukkit, no state - so it can be covered by unit tests.
+ * This is where the only "intelligence" of the plugin lives: the cost weights of game
+ * objects and the thresholds that decide the category.</p>
  *
- * <p>Wagi sa przyblizeniem realnego kosztu ticku wzgledem przecietnego moba (= 1.0).
- * Nie sa wynikiem profilowania - maja jedynie sprawic, ze 40 hopperow wazy wiecej
- * niz 40 skrzyn, a 200 lezacych itemow nie przebija 200 villagerow.</p>
+ * <p>Weights approximate the real tick cost relative to an average mob (= 1.0). They are
+ * not the result of profiling - they exist so that 40 hoppers outweigh 40 chests, and
+ * 200 dropped items do not outrank 200 villagers.</p>
  */
 public final class HotspotAnalyzer {
 
     /**
-     * Ponizej tego wyniku chunk nie jest uznawany za podejrzany.
+     * Chunks scoring below this are not considered suspicious.
      *
-     * <p>Prog skalibrowany na zywym serwerze: przy wartosci 25 zwykly chunk z kilkudziesiecioma
-     * spadajacymi blokami podczas generowania terenu dostawal etykiete "farma mobow".
-     * Chunk musi wyraznie odstawac, zeby w ogole trafil do raportu.</p>
+     * <p>Calibrated on a live server: at 25, an ordinary chunk holding a few dozen falling
+     * blocks during terrain generation was being labelled a "mob farm". A chunk has to stand
+     * out clearly before it makes it into a report.</p>
      */
     public static final double MIN_INTERESTING_SCORE = 80.0D;
 
-    /** Udzial jednego typu encji, od ktorego mowimy o "dominacji" (farma, zwal itemow). */
+    /** Share of a single entity type that counts as "dominant" (a farm, an item pile). */
     private static final double DOMINANCE_SHARE = 0.5D;
 
-    /** Od tylu encji chunk w ogole moze dostac kategorie zwiazana z encjami. */
+    /** Minimum entity count before a chunk can get an entity-related category at all. */
     private static final int ENTITY_HEAVY_COUNT = 60;
 
-    /** Od tylu graczy mowimy o skupisku graczy. */
+    /** Number of players that makes a chunk a crowd. */
     private static final int PLAYER_CLUSTER_COUNT = 5;
 
-    /** Udzial block-entity w wyniku, od ktorego winowajca jest redstone. */
+    /** Share of the score coming from block entities that points at redstone. */
     private static final double TILE_DOMINANCE_SHARE = 0.6D;
 
     private static final double DEFAULT_ENTITY_WEIGHT = 1.0D;
     private static final double DEFAULT_TILE_WEIGHT = 0.3D;
 
     private static final Map<String, Double> ENTITY_WEIGHTS = Map.ofEntries(
-            // Gracz kosztuje duzo wiecej niz mob: trzyma zaladowane chunki wokol siebie i generuje ruch sieciowy.
+            // A player costs far more than a mob: they keep chunks loaded and generate network traffic.
             Map.entry("PLAYER", 5.0D),
             Map.entry("ITEM", 0.5D),
             Map.entry("DROPPED_ITEM", 0.5D),
             Map.entry("EXPERIENCE_ORB", 0.6D),
-            // Encje krotkotrwale - pojawiaja sie masowo przy generowaniu terenu i walce, ale szybko znikaja.
+            // Short-lived entities - they appear in bulk during terrain generation and combat, then vanish.
             Map.entry("FALLING_BLOCK", 0.3D),
             Map.entry("ARROW", 0.3D),
             Map.entry("SNOWBALL", 0.2D),
@@ -100,10 +100,10 @@ public final class HotspotAnalyzer {
     }
 
     /**
-     * Liczy wazony koszt encji w chunku.
+     * Computes the weighted cost of entities in a chunk.
      *
-     * @param stat migawka chunka
-     * @return suma wag wszystkich encji
+     * @param stat chunk snapshot
+     * @return sum of the weights of all entities
      */
     public static double entityScore(ChunkStat stat) {
         double score = 0.0D;
@@ -114,10 +114,10 @@ public final class HotspotAnalyzer {
     }
 
     /**
-     * Liczy wazony koszt block-entity w chunku.
+     * Computes the weighted cost of block entities in a chunk.
      *
-     * @param stat migawka chunka
-     * @return suma wag wszystkich block-entity
+     * @param stat chunk snapshot
+     * @return sum of the weights of all block entities
      */
     public static double tileScore(ChunkStat stat) {
         double score = 0.0D;
@@ -128,21 +128,21 @@ public final class HotspotAnalyzer {
     }
 
     /**
-     * Laczny wynik chunka - im wyzszy, tym bardziej prawdopodobny winowajca.
+     * Total score of a chunk - the higher, the more likely the culprit.
      *
-     * @param stat migawka chunka
-     * @return suma wynikow encji i block-entity
+     * @param stat chunk snapshot
+     * @return combined entity and block entity score
      */
     public static double score(ChunkStat stat) {
         return entityScore(stat) + tileScore(stat);
     }
 
     /**
-     * Wybiera najbardziej podejrzane chunki.
+     * Picks the most suspicious chunks.
      *
-     * @param stats wszystkie zeskanowane chunki
-     * @param limit maksymalna liczba wynikow
-     * @return lista posortowana malejaco po wyniku, bez chunkow ponizej progu istotnosci
+     * @param stats every scanned chunk
+     * @param limit maximum number of results
+     * @return list sorted by score descending, without chunks below the relevance threshold
      */
     public static List<ChunkStat> topChunks(List<ChunkStat> stats, int limit) {
         if (limit <= 0) {
@@ -150,7 +150,7 @@ public final class HotspotAnalyzer {
         }
         return stats.stream()
                 .filter(stat -> score(stat) >= MIN_INTERESTING_SCORE)
-                // Remisy rozstrzygamy liczba encji, a potem lokalizacja - wynik ma byc powtarzalny.
+                // Ties break on entity count, then location - the result has to be reproducible.
                 .sorted(Comparator.comparingDouble(HotspotAnalyzer::score).reversed()
                         .thenComparing(Comparator.comparingInt(ChunkStat::entityCount).reversed())
                         .thenComparing(ChunkStat::prettyLocation))
@@ -159,10 +159,10 @@ public final class HotspotAnalyzer {
     }
 
     /**
-     * Zgaduje przyczyne lagu dla pojedynczego chunka.
+     * Guesses the cause of lag for a single chunk.
      *
-     * @param stat migawka chunka
-     * @return dopasowana kategoria, nigdy {@code null}
+     * @param stat chunk snapshot
+     * @return matching category, never {@code null}
      */
     public static LagCategory categorize(ChunkStat stat) {
         double entityScore = entityScore(stat);
@@ -204,11 +204,11 @@ public final class HotspotAnalyzer {
     }
 
     /**
-     * Buduje podpowiedz dla admina - konkretna komende albo krotka instrukcje.
+     * Builds a hint for the admin - either a ready command or a short instruction.
      *
-     * @param stat     migawka chunka
-     * @param category kategoria wyliczona przez {@link #categorize(ChunkStat)}
-     * @return jednozdaniowa sugestia dzialania
+     * @param stat     chunk snapshot
+     * @param category category produced by {@link #categorize(ChunkStat)}
+     * @return one-sentence suggested action
      */
     public static String suggestedAction(ChunkStat stat, LagCategory category) {
         String tp = "/tp " + stat.blockX() + " ~ " + stat.blockZ();
@@ -217,29 +217,30 @@ public final class HotspotAnalyzer {
 
         return switch (category) {
             case MOB_FARM -> dominantEntity == null
-                    ? "Skocz na miejsce (" + tp + ") i sprawdz, co sie tam nazbieralo."
-                    : "Skocz na miejsce (" + tp + "). Podejrzana farma: " + dominantEntity.getValue() + "x "
-                    + friendly(dominantEntity.getKey()) + ". Doraznie: " + killCommand(stat, dominantEntity.getKey());
-            case ITEM_CLUTTER -> "Posprzataj lezace przedmioty: " + killCommand(stat, "item")
-                    + " (najpierw " + tp + ", zeby zobaczyc czyje to).";
+                    ? "Go there (" + tp + ") and see what piled up."
+                    : "Go there (" + tp + "). Suspected farm: " + dominantEntity.getValue() + "x "
+                    + friendly(dominantEntity.getKey()) + ". Quick fix: " + killCommand(stat, dominantEntity.getKey());
+            case ITEM_CLUTTER -> "Clear the dropped items: " + killCommand(stat, "item")
+                    + " (run " + tp + " first to see whose they are).";
             case REDSTONE -> dominantTile == null
-                    ? "Sprawdz maszyne redstone w tym miejscu (" + tp + ")."
-                    : "Sprawdz maszyne redstone (" + tp + "): " + dominantTile.getValue() + "x "
-                    + friendly(dominantTile.getKey()) + ". Hoppery warto ograniczyc lub zastapic wodnym transportem.";
-            case PLAYER_CLUSTER -> "W tym chunku jest " + stat.playerCount()
-                    + " graczy - jesli to spawn albo event, lag jest spodziewany. Sprawdz: " + tp + ".";
-            case ENTITY_OVERLOAD -> "Duzo roznych encji (" + stat.entityCount() + ") w jednym chunku. Zajrzyj tam: " + tp + ".";
-            case UNKNOWN -> "Zaden pojedynczy chunk sie nie wyroznia - przyczyna moze byc poza swiatem gry "
-                    + "(plugin, zapis mapy, generowanie terenu). Warto odpalic spark profiler.";
+                    ? "Check the redstone build at this spot (" + tp + ")."
+                    : "Check the redstone build (" + tp + "): " + dominantTile.getValue() + "x "
+                    + friendly(dominantTile.getKey()) + ". Hoppers are worth reducing or replacing with water streams.";
+            case PLAYER_CLUSTER -> "There are " + stat.playerCount()
+                    + " players in this chunk - if that is spawn or an event, the lag is expected. Check: " + tp + ".";
+            case ENTITY_OVERLOAD -> "A lot of mixed entities (" + stat.entityCount()
+                    + ") in one chunk. Take a look: " + tp + ".";
+            case UNKNOWN -> "No single chunk stands out - the cause may be outside the game world "
+                    + "(a plugin, world saving, terrain generation). Running the spark profiler is worth a try.";
         };
     }
 
     /**
-     * Buduje polecenie usuwajace encje danego typu w obrebie wskazanego chunka.
+     * Builds a command that removes entities of a given type within the chunk bounds.
      *
-     * @param stat migawka chunka
-     * @param type typ encji (nazwa Bukkitowa lub identyfikator wanilii)
-     * @return gotowa do wklejenia komenda {@code /kill}
+     * @param stat chunk snapshot
+     * @param type entity type (Bukkit name or vanilla id)
+     * @return ready-to-paste {@code /kill} command
      */
     public static String killCommand(ChunkStat stat, String type) {
         int cornerX = stat.chunkX() * 16;
@@ -248,19 +249,25 @@ public final class HotspotAnalyzer {
                 + ",dx=16,dy=384,dz=16]";
     }
 
-    /** @return waga kosztu encji danego typu */
+    /**
+     * @param entityType entity type name
+     * @return cost weight of that entity type
+     */
     public static double entityWeight(String entityType) {
         return ENTITY_WEIGHTS.getOrDefault(entityType.toUpperCase(Locale.ROOT), DEFAULT_ENTITY_WEIGHT);
     }
 
-    /** @return waga kosztu block-entity danego typu */
+    /**
+     * @param tileType block entity type name
+     * @return cost weight of that block entity type
+     */
     public static double tileWeight(String tileType) {
         String type = tileType.toUpperCase(Locale.ROOT);
         Double exact = TILE_WEIGHTS.get(type);
         if (exact != null) {
             return exact;
         }
-        // Dekoracje wystepuja w setkach wariantow (tabliczki, banery, glowy) i sa praktycznie darmowe.
+        // Decoration comes in hundreds of variants (signs, banners, heads) and is practically free.
         if (type.endsWith("SIGN") || type.endsWith("BANNER") || type.endsWith("HEAD")
                 || type.endsWith("SKULL") || type.endsWith("BED") || type.endsWith("POT")) {
             return 0.05D;
@@ -277,7 +284,7 @@ public final class HotspotAnalyzer {
 
     private static String vanillaId(String type) {
         String lower = type.toLowerCase(Locale.ROOT);
-        // Bukkit historycznie nazywa lezacy przedmiot DROPPED_ITEM, wanilia zna tylko "item".
+        // Bukkit historically calls a dropped item DROPPED_ITEM; vanilla only knows "item".
         return "dropped_item".equals(lower) ? "item" : lower;
     }
 

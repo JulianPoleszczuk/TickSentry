@@ -7,13 +7,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Podsumowanie incydentow z zadanego okresu - odpowiedz na pytanie "kiedy i przez co nam laguje".
+ * Summary of incidents over a period - the answer to "when and why does this server lag".
  *
- * @param days       dlugosc analizowanego okresu w dniach
- * @param total      liczba incydentow w tym okresie
- * @param byCategory ile razy wystapila kazda przyczyna
- * @param byHour     liczba incydentow w rozbiciu na godziny doby (indeks 0-23)
- * @param worst      incydent z najgorszym czasem ticku lub {@code null}, gdy brak danych
+ * @param days       length of the analysed period, in days
+ * @param total      number of incidents in that period
+ * @param byCategory how many times each cause appeared
+ * @param byHour     incident counts per hour of the day (index 0-23)
+ * @param worst      incident with the worst tick time, or {@code null} when there is no data
  */
 public record IncidentStats(
         int days,
@@ -23,12 +23,15 @@ public record IncidentStats(
         StoredIncident worst
 ) {
 
-    /** @return pusty wynik dla okresu bez zadnego incydentu */
+    /**
+     * @param days length of the period
+     * @return empty result for a period without a single incident
+     */
     public static IncidentStats empty(int days) {
         return new IncidentStats(days, 0, Map.of(), new int[24], null);
     }
 
-    /** @return najczestsza przyczyna albo {@code null}, gdy brak danych */
+    /** @return most common cause, or {@code null} when there is no data */
     public LagCategory dominantCategory() {
         return byCategory.entrySet().stream()
                 .max(Comparator.comparingInt(Map.Entry::getValue))
@@ -37,9 +40,9 @@ public record IncidentStats(
     }
 
     /**
-     * Wskazuje pore doby, w ktorej serwer laguje najczesciej.
+     * Points at the time of day the server lags most often.
      *
-     * @return godzina 0-23 albo -1, gdy brak danych
+     * @return hour 0-23, or -1 when there is no data
      */
     public int worstHour() {
         int best = -1;
@@ -54,9 +57,9 @@ public record IncidentStats(
     }
 
     /**
-     * Buduje prosty wykres slupkowy rozkladu dobowego, gotowy do wyslania w czacie.
+     * Builds a simple bar chart of the daily spread, ready to print in chat.
      *
-     * @return lista linii, po jednej na kazda niepusta godzine
+     * @return one line per non-empty hour
      */
     public List<String> hourHistogram() {
         int max = 0;

@@ -9,22 +9,22 @@ import java.time.Instant;
 import java.util.Map;
 
 /**
- * Splaszczony incydent w postaci, w jakiej trafia do bazy i wraca z niej.
+ * A flattened incident, in the shape that goes into the database and comes back out.
  *
- * <p>Nie przechowujemy calej listy podejrzanych chunkow - do historii i statystyk wystarcza
- * ten glowny. Dzieki temu jeden incydent to jeden wiersz.</p>
+ * <p>The full list of suspicious chunks is not stored - for history and statistics the main one
+ * is enough. That way one incident is one row.</p>
  *
- * @param timestamp      moment wykrycia
- * @param tps            TPS w chwili wykrycia
- * @param mspt           sredni czas ticku w chwili wykrycia
- * @param category       zgadnieta przyczyna
- * @param world          swiat glownego podejrzanego chunka lub {@code null}
- * @param blockX         wspolrzedna X srodka tego chunka
- * @param blockZ         wspolrzedna Z srodka tego chunka
- * @param entities       liczba encji w tym chunku
- * @param dominantType   najliczniejszy typ encji lub {@code null}
- * @param dominantCount  liczba wystapien dominujacego typu
- * @param manual         czy incydent pochodzil z recznego skanu
+ * @param timestamp     when it was detected
+ * @param tps           TPS at detection time
+ * @param mspt          average tick time at detection time
+ * @param category      guessed cause
+ * @param world         world of the main suspect chunk, or {@code null}
+ * @param blockX        block X coordinate of that chunk's centre
+ * @param blockZ        block Z coordinate of that chunk's centre
+ * @param entities      entity count in that chunk
+ * @param dominantType  most common entity type, or {@code null}
+ * @param dominantCount number of entities of the dominant type
+ * @param manual        whether the incident came from a manual scan
  */
 public record StoredIncident(
         Instant timestamp,
@@ -41,10 +41,10 @@ public record StoredIncident(
 ) {
 
     /**
-     * Splaszcza pelny incydent do postaci nadajacej sie do zapisu.
+     * Flattens a full incident into a storable row.
      *
-     * @param event zrodlowy incydent
-     * @return rekord gotowy do wstawienia do bazy
+     * @param event source incident
+     * @return record ready to be inserted
      */
     public static StoredIncident from(LagEvent event) {
         ChunkStat primary = event.primaryChunk();
@@ -63,15 +63,15 @@ public record StoredIncident(
                 event.manual());
     }
 
-    /** @return czytelny opis lokalizacji albo informacja o jej braku */
+    /** @return readable location, or a note that there is none */
     public String prettyLocation() {
-        return world == null ? "brak konkretnego miejsca" : world + " @ " + blockX + ", " + blockZ;
+        return world == null ? "no specific place" : world + " @ " + blockX + ", " + blockZ;
     }
 
     /**
-     * Serializuje incydent na potrzeby panelu webowego.
+     * Serialises the incident for the web dashboard.
      *
-     * @return obiekt JSON z polami czytanymi przez dashboard.html
+     * @return JSON object with the fields read by dashboard.html
      */
     public String toJson() {
         return "{"
@@ -88,10 +88,10 @@ public record StoredIncident(
     }
 
     /**
-     * Sklada tablice JSON z listy incydentow.
+     * Builds a JSON array from a list of incidents.
      *
-     * @param incidents lista do zserializowania
-     * @return tablica JSON gotowa dla dashboardu
+     * @param incidents list to serialise
+     * @return JSON array ready for the dashboard
      */
     public static String toJsonArray(java.util.List<StoredIncident> incidents) {
         StringBuilder json = new StringBuilder("[");

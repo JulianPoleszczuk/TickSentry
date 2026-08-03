@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Obsluga komendy {@code /lagwatch} - podglad kondycji serwera bez wychodzenia z gry.
+ * Handles {@code /lagwatch} - server health at a glance, without leaving the game.
  */
 public final class LagWatchCommand implements CommandExecutor, TabCompleter {
 
@@ -30,16 +30,16 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
     private static final DateTimeFormatter DATE_TIME =
             DateTimeFormatter.ofPattern("dd.MM HH:mm").withZone(ZoneId.systemDefault());
 
-    /** Ile incydentow pokazuje {@code /lagwatch history}. */
+    /** How many incidents {@code /lagwatch history} prints. */
     private static final int HISTORY_SHOWN = 8;
 
-    /** Domyslny okres analizowany przez {@code /lagwatch stats}. */
+    /** Default period analysed by {@code /lagwatch stats}. */
     private static final int DEFAULT_STATS_DAYS = 7;
 
     private final TickSentryPlugin plugin;
 
     /**
-     * @param plugin instancja pluginu, z ktorej komenda czerpie stan
+     * @param plugin plugin instance the command reads its state from
      */
     public LagWatchCommand(TickSentryPlugin plugin) {
         this.plugin = plugin;
@@ -48,7 +48,7 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission(PERMISSION)) {
-            sender.sendMessage(ChatColor.RED + "Brak uprawnien.");
+            sender.sendMessage(ChatColor.RED + "You do not have permission.");
             return true;
         }
 
@@ -59,12 +59,12 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
             case "history" -> showHistory(sender);
             case "stats" -> showStats(sender, parseDays(args));
             case "reload" -> reload(sender);
-            default -> sender.sendMessage(ChatColor.RED + "Uzycie: /" + label + " <status|report|history|stats|reload>");
+            default -> sender.sendMessage(ChatColor.RED + "Usage: /" + label + " <status|report|history|stats|reload>");
         }
         return true;
     }
 
-    /** Wypisuje biezace odczyty monitora. */
+    /** Prints the current monitor readings. */
     private void showStatus(CommandSender sender) {
         TickMonitor monitor = plugin.tickMonitor();
         double mspt = monitor.averageMspt();
@@ -72,62 +72,63 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
 
         header(sender, "Status");
         sender.sendMessage(ChatColor.GRAY + "Monitoring: " + (monitor.isRunning()
-                ? ChatColor.GREEN + "aktywny" : ChatColor.RED + "zatrzymany"));
+                ? ChatColor.GREEN + "running" : ChatColor.RED + "stopped"));
         sender.sendMessage(ChatColor.GRAY + "TPS: " + healthColor(monitor.tps() >= 19.0D, monitor.tps() >= 17.0D)
                 + String.format(Locale.ROOT, "%.2f", monitor.tps()) + ChatColor.DARK_GRAY + " / 20");
-        sender.sendMessage(ChatColor.GRAY + "Czas ticku: " + healthColor(mspt <= threshold * 0.6D, mspt <= threshold)
+        sender.sendMessage(ChatColor.GRAY + "Tick time: " + healthColor(mspt <= threshold * 0.6D, mspt <= threshold)
                 + String.format(Locale.ROOT, "%.1f ms", mspt)
-                + ChatColor.DARK_GRAY + " (prog: " + String.format(Locale.ROOT, "%.0f ms", threshold) + ")");
-        sender.sendMessage(ChatColor.GRAY + "Najdluzsza zwiecha w oknie: " + ChatColor.WHITE
+                + ChatColor.DARK_GRAY + " (threshold: " + String.format(Locale.ROOT, "%.0f ms", threshold) + ")");
+        sender.sendMessage(ChatColor.GRAY + "Longest freeze in window: " + ChatColor.WHITE
                 + String.format(Locale.ROOT, "%.0f ms", monitor.peakIntervalMs()));
 
         long breach = monitor.currentBreachSeconds();
         if (breach > 0L) {
-            sender.sendMessage(ChatColor.RED + "Prog przekroczony od " + breach + " s (alert po "
+            sender.sendMessage(ChatColor.RED + "Threshold exceeded for " + breach + " s (alert after "
                     + plugin.configManager().sustainedSeconds() + " s).");
         }
         long cooldown = monitor.alertCooldownRemainingSeconds();
         if (cooldown > 0L) {
-            sender.sendMessage(ChatColor.GRAY + "Kolejny alert mozliwy za " + ChatColor.WHITE + cooldown + " s" + ChatColor.GRAY + ".");
+            sender.sendMessage(ChatColor.GRAY + "Next alert possible in " + ChatColor.WHITE + cooldown + " s"
+                    + ChatColor.GRAY + ".");
         }
         sender.sendMessage(ChatColor.GRAY + "Discord: " + (plugin.configManager().discordEnabled()
-                ? ChatColor.GREEN + "skonfigurowany" : ChatColor.YELLOW + "wylaczony lub brak webhooka"));
+                ? ChatColor.GREEN + "configured" : ChatColor.YELLOW + "disabled or webhook missing"));
 
         String spark = plugin.sparkBridge().summary();
         sender.sendMessage(ChatColor.GRAY + "Spark: " + (spark == null
-                ? ChatColor.DARK_GRAY + "niedostepny (uzywam wlasnych pomiarow)"
+                ? ChatColor.DARK_GRAY + "unavailable (using built-in measurements)"
                 : ChatColor.WHITE + spark));
-        sender.sendMessage(ChatColor.GRAY + "Historia: " + ChatColor.WHITE + plugin.alertStore().describe()
-                + ChatColor.DARK_GRAY + " (" + Plural.incidents(plugin.incidentsLast24h()) + " w ostatniej dobie)");
+        sender.sendMessage(ChatColor.GRAY + "History: " + ChatColor.WHITE + plugin.alertStore().describe()
+                + ChatColor.DARK_GRAY + " (" + Plural.incidents(plugin.incidentsLast24h()) + " in the last 24 h)");
     }
 
-    /** Wymusza skan i wypisuje wynik w czacie; opcjonalnie wysyla go tez na Discorda. */
+    /** Forces a scan and prints the result in chat; optionally sends it to Discord too. */
     private void showReport(CommandSender sender, boolean alsoDiscord) {
         boolean started = plugin.runScan(true, event -> printReport(sender, event, alsoDiscord));
         if (!started) {
-            sender.sendMessage(ChatColor.YELLOW + "Skan juz trwa - wynik pojawi sie za chwile.");
+            sender.sendMessage(ChatColor.YELLOW + "A scan is already running - the result will show up shortly.");
         }
     }
 
-    /** Wypisuje gotowy raport; wywolywane po zakonczeniu skanu rozlozonego na ticki. */
+    /** Prints a finished report; called once the tick-spread scan completes. */
     private void printReport(CommandSender sender, LagEvent event, boolean alsoDiscord) {
         plugin.recordManual(event);
 
-        header(sender, "Raport");
+        header(sender, "Report");
         sender.sendMessage(ChatColor.GRAY + "TPS " + ChatColor.WHITE + String.format(Locale.ROOT, "%.2f", event.tps())
-                + ChatColor.GRAY + ", czas ticku " + ChatColor.WHITE + String.format(Locale.ROOT, "%.1f ms", event.averageMspt())
-                + ChatColor.GRAY + ", przeskanowano " + ChatColor.WHITE + event.loadedChunks() + ChatColor.GRAY
-                + " chunkow (" + event.totalEntities() + " encji).");
+                + ChatColor.GRAY + ", tick time " + ChatColor.WHITE + String.format(Locale.ROOT, "%.1f ms", event.averageMspt())
+                + ChatColor.GRAY + ", scanned " + ChatColor.WHITE + event.loadedChunks() + ChatColor.GRAY
+                + " chunks (" + event.totalEntities() + " entities).");
 
         if (event.topChunks().isEmpty()) {
-            sender.sendMessage(ChatColor.GREEN + "Zaden chunk sie nie wyroznia - swiat gry wyglada spokojnie.");
+            sender.sendMessage(ChatColor.GREEN + "No chunk stands out - the game world looks calm.");
         } else {
-            sender.sendMessage(ChatColor.GRAY + "Prawdopodobna przyczyna: " + ChatColor.AQUA + event.category().title());
+            sender.sendMessage(ChatColor.GRAY + "Likely cause: " + ChatColor.AQUA + event.category().title());
             int index = 1;
             for (ChunkStat stat : event.topChunks()) {
                 sender.sendMessage(ChatColor.DARK_GRAY + " " + index++ + ". " + ChatColor.WHITE + stat.prettyLocation()
-                        + ChatColor.GRAY + " - " + stat.entityCount() + " encji, "
-                        + stat.tileEntityCount() + " block-entity" + describeDominant(stat));
+                        + ChatColor.GRAY + " - " + stat.entityCount() + " entities, "
+                        + stat.tileEntityCount() + " block entities" + describeDominant(stat));
             }
             sender.sendMessage(ChatColor.YELLOW + event.suggestedAction());
         }
@@ -138,74 +139,74 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         if (alsoDiscord) {
             if (plugin.configManager().discordEnabled()) {
                 plugin.webhook().sendLagAlert(event);
-                sender.sendMessage(ChatColor.GRAY + "Raport wyslany takze na Discorda.");
+                sender.sendMessage(ChatColor.GRAY + "Report also sent to Discord.");
             } else {
-                sender.sendMessage(ChatColor.RED + "Discord jest wylaczony albo webhook-url jest pusty.");
+                sender.sendMessage(ChatColor.RED + "Discord is disabled or the webhook URL is empty.");
             }
         }
     }
 
-    /** Wypisuje ostatnie incydenty; przy skladzie SQLite obejmuje takze te sprzed restartu. */
+    /** Prints recent incidents; with SQLite storage this includes ones from before a restart. */
     private void showHistory(CommandSender sender) {
         plugin.alertStore().recent(HISTORY_SHOWN, incidents -> {
-            header(sender, "Historia");
+            header(sender, "History");
             if (incidents.isEmpty()) {
-                sender.sendMessage(ChatColor.GREEN + "Nie zapisano jeszcze zadnego incydentu.");
+                sender.sendMessage(ChatColor.GREEN + "No incidents recorded yet.");
                 return;
             }
             for (StoredIncident incident : incidents) {
                 boolean today = Duration.between(incident.timestamp(), Instant.now()).toHours() < 24L;
                 DateTimeFormatter format = today ? TIME : DATE_TIME;
                 sender.sendMessage(ChatColor.DARK_GRAY + format.format(incident.timestamp()) + ChatColor.GRAY
-                        + " (" + ago(incident.timestamp()) + " temu) " + ChatColor.WHITE
+                        + " (" + ago(incident.timestamp()) + " ago) " + ChatColor.WHITE
                         + String.format(Locale.ROOT, "%.0f ms", incident.mspt())
                         + ChatColor.GRAY + " - " + incident.category().title()
                         + (incident.world() == null ? "" : ChatColor.DARK_GRAY + " @ " + incident.prettyLocation())
-                        + (incident.manual() ? ChatColor.DARK_GRAY + " [recznie]" : ""));
+                        + (incident.manual() ? ChatColor.DARK_GRAY + " [manual]" : ""));
             }
         });
     }
 
-    /** Wypisuje podsumowanie incydentow: ile, przez co i o ktorej godzinie najczesciej. */
+    /** Prints an incident summary: how many, caused by what, and at which hour most often. */
     private void showStats(CommandSender sender, int days) {
         plugin.alertStore().stats(days, stats -> {
-            header(sender, "Statystyki (" + days + " dni)");
+            header(sender, "Stats (" + days + " days)");
             if (stats.total() == 0) {
-                sender.sendMessage(ChatColor.GREEN + "Brak incydentow w tym okresie - serwer trzymal sie dobrze.");
+                sender.sendMessage(ChatColor.GREEN + "No incidents in this period - the server held up well.");
                 return;
             }
 
-            sender.sendMessage(ChatColor.GRAY + "Zapisano: " + ChatColor.WHITE + Plural.incidents(stats.total()));
+            sender.sendMessage(ChatColor.GRAY + "Recorded: " + ChatColor.WHITE + Plural.incidents(stats.total()));
 
             LagCategory dominant = stats.dominantCategory();
             if (dominant != null) {
-                sender.sendMessage(ChatColor.GRAY + "Najczestsza przyczyna: " + ChatColor.AQUA + dominant.title()
+                sender.sendMessage(ChatColor.GRAY + "Most common cause: " + ChatColor.AQUA + dominant.title()
                         + ChatColor.DARK_GRAY + " (" + stats.byCategory().getOrDefault(dominant, 0) + "x)");
             }
 
             int worstHour = stats.worstHour();
             if (worstHour >= 0) {
-                sender.sendMessage(ChatColor.GRAY + "Najgorsza pora: " + ChatColor.WHITE
+                sender.sendMessage(ChatColor.GRAY + "Worst time of day: " + ChatColor.WHITE
                         + String.format("%02d:00-%02d:59", worstHour, worstHour)
                         + ChatColor.DARK_GRAY + " (" + Plural.incidents(stats.byHour()[worstHour]) + ")");
             }
 
             StoredIncident worst = stats.worst();
             if (worst != null) {
-                sender.sendMessage(ChatColor.GRAY + "Najciezszy moment: " + ChatColor.WHITE
+                sender.sendMessage(ChatColor.GRAY + "Worst moment: " + ChatColor.WHITE
                         + String.format(Locale.ROOT, "%.0f ms", worst.mspt()) + ChatColor.DARK_GRAY
                         + " " + DATE_TIME.format(worst.timestamp()) + " - " + worst.prettyLocation());
             }
 
             List<String> histogram = stats.hourHistogram();
             if (!histogram.isEmpty()) {
-                sender.sendMessage(ChatColor.GRAY + "Rozklad w ciagu doby:");
+                sender.sendMessage(ChatColor.GRAY + "Spread across the day:");
                 histogram.forEach(line -> sender.sendMessage(ChatColor.DARK_GRAY + " " + line));
             }
         });
     }
 
-    /** Czyta opcjonalna liczbe dni z argumentow komendy. */
+    /** Reads the optional day count from the command arguments. */
     private static int parseDays(String[] args) {
         if (args.length < 2) {
             return DEFAULT_STATS_DAYS;
@@ -217,14 +218,14 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    /** Przeladowuje config i resetuje okno pomiarowe monitora. */
+    /** Reloads the config and resets the monitor's sample window. */
     private void reload(CommandSender sender) {
         plugin.configManager().reload();
         plugin.tickMonitor().reset();
         header(sender, "Reload");
-        sender.sendMessage(ChatColor.GREEN + "Konfiguracja przeladowana. Prog: "
+        sender.sendMessage(ChatColor.GREEN + "Configuration reloaded. Threshold: "
                 + String.format(Locale.ROOT, "%.0f ms", plugin.configManager().msptThresholdMs())
-                + " przez " + plugin.configManager().sustainedSeconds() + " s.");
+                + " for " + plugin.configManager().sustainedSeconds() + " s.");
     }
 
     private static String describeDominant(ChunkStat stat) {
@@ -232,7 +233,7 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         if (dominant == null || dominant.getValue() < 10) {
             return "";
         }
-        return ChatColor.DARK_GRAY + " (glownie " + dominant.getValue() + "x "
+        return ChatColor.DARK_GRAY + " (mostly " + dominant.getValue() + "x "
                 + dominant.getKey().toLowerCase(Locale.ROOT).replace('_', ' ') + ")";
     }
 

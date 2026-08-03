@@ -17,23 +17,24 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * Przeglada zaladowane chunki i wskazuje te, ktore najprawdopodobniej odpowiadaja za lag.
+ * Walks loaded chunks and points at the ones most likely responsible for lag.
  *
- * <p>Odczyt encji i block-entity musi isc przez glowny watek - Bukkit API nie jest bezpieczne
- * asynchronicznie. Zeby mimo to nie zablokowac serwera, skan jest <b>rozlozony na wiele tickow</b>
- * z twardym budzetem czasu na tick. Pomiar na zywym serwerze: 625 chunkow za jednym zamachem
- * zajmowalo 181 ms, czyli plugin walczacy z lagiem sam robilby zwieche. Teraz kazdy tick oddaje
- * sterowanie po {@value #BUDGET_MILLIS} ms, a wynik przychodzi callbackiem po zakonczeniu.</p>
+ * <p>Reading entities and block entities has to happen on the main server thread - the Bukkit
+ * API is not safe to touch asynchronously. To avoid stalling the server anyway, the scan is
+ * <b>spread across multiple ticks</b> with a hard time budget per tick. Measured on a live
+ * server: scanning 625 chunks in one go took 181 ms, meaning a plugin fighting lag was itself
+ * causing a freeze. Now every tick hands control back after {@value #BUDGET_MILLIS} ms and the
+ * result arrives through a callback once finished.</p>
  *
- * <p>Swiadome uproszczenie MVP: nie probujemy samplowac stosu wywolan jak spark. Zamiast tego
- * korelujemy wysoki MSPT z anomalna zawartoscia konkretnego chunka w tym samym oknie czasowym.</p>
+ * <p>Deliberate MVP simplification: no call-stack sampling like spark. Instead, high MSPT is
+ * correlated with an anomalous chunk in the same time window.</p>
  */
 public final class ChunkHotspotScanner {
 
-    /** Chunki z mniejsza liczba obiektow nie maja szans przekroczyc progu istotnosci - pomijamy je bez alokacji map. */
+    /** Chunks holding fewer objects cannot reach the relevance threshold - skipped without allocating maps. */
     private static final int MIN_OBJECTS_PER_CHUNK = 8;
 
-    /** Ile milisekund jednego ticku wolno zuzyc na skanowanie. */
+    /** How many milliseconds of a single tick may be spent scanning. */
     private static final long BUDGET_MILLIS = 3L;
 
     private static final long BUDGET_NANOS = BUDGET_MILLIS * 1_000_000L;
@@ -44,9 +45,9 @@ public final class ChunkHotspotScanner {
     private boolean scanning;
 
     /**
-     * @param plugin instancja pluginu (dostep do serwera i schedulera)
-     * @param config zrodlo listy pomijanych swiatow i limitu wynikow
-     * @param spark  opcjonalne zrodlo dodatkowych statystyk
+     * @param plugin plugin instance (server and scheduler access)
+     * @param config source of ignored worlds and the result limit
+     * @param spark  optional source of extra statistics
      */
     public ChunkHotspotScanner(Plugin plugin, ConfigManager config, SparkBridge spark) {
         this.plugin = plugin;
@@ -54,23 +55,23 @@ public final class ChunkHotspotScanner {
         this.spark = spark;
     }
 
-    /** @return {@code true}, jesli skan wlasnie trwa */
+    /** @return {@code true} while a scan is in progress */
     public boolean isScanning() {
         return scanning;
     }
 
     /**
-     * Rozpoczyna skan rozlozony na kolejne ticki.
+     * Starts a scan spread across upcoming ticks.
      *
-     * <p>Metoda wraca natychmiast; gotowy raport trafia do {@code callback} na glownym watku,
-     * zwykle w tym samym lub w kilku nastepnych tickach.</p>
+     * <p>Returns immediately; the finished report reaches {@code callback} on the main thread,
+     * usually within the same or the next few ticks.</p>
      *
-     * @param tps      aktualny TPS
-     * @param mspt     aktualna srednia MSPT
-     * @param peakMs   najdluzszy odstep miedzy tickami w oknie
-     * @param manual   czy skan zostal wymuszony komenda
-     * @param callback odbiorca gotowego incydentu
-     * @return {@code false}, jesli inny skan juz trwa i to zlecenie zostalo pominiete
+     * @param tps      current TPS
+     * @param mspt     current average MSPT
+     * @param peakMs   longest gap between ticks in the window
+     * @param manual   whether the scan was forced by a command
+     * @param callback receiver of the finished incident
+     * @return {@code false} if another scan is already running and this request was skipped
      */
     public boolean startScan(double tps, double mspt, double peakMs, boolean manual, Consumer<LagEvent> callback) {
         if (scanning) {
@@ -88,7 +89,7 @@ public final class ChunkHotspotScanner {
         return true;
     }
 
-    /** Zamienia surowe tablice z Bukkita na niezalezna od API migawke chunka. */
+    /** Turns raw Bukkit arrays into an API-independent chunk snapshot. */
     private static ChunkStat toStat(Chunk chunk, Entity[] entities, BlockState[] tiles) {
         Map<String, Integer> entityCounts = new HashMap<>();
         int players = 0;
@@ -108,7 +109,7 @@ public final class ChunkHotspotScanner {
         return new ChunkStat(chunk.getWorld().getName(), chunk.getX(), chunk.getZ(), players, entityCounts, tileCounts);
     }
 
-    /** Przetwarza kolejke chunkow porcjami, oddajac sterowanie po wyczerpaniu budzetu na tick. */
+    /** Processes the chunk queue in slices, yielding once the per-tick budget runs out. */
     private final class ScanTask extends BukkitRunnable {
 
         private final List<Chunk> queue;
@@ -145,7 +146,7 @@ public final class ChunkHotspotScanner {
                     return;
                 }
                 Chunk chunk = queue.get(index++);
-                // Chunk mogl zostac wyladowany miedzy tickami - odczyt wymusilby jego ponowne wczytanie.
+                // The chunk may have been unloaded between ticks - reading it would force a reload.
                 if (!chunk.isLoaded()) {
                     continue;
                 }
@@ -167,8 +168,8 @@ public final class ChunkHotspotScanner {
         private void finish() {
             List<ChunkStat> top = HotspotAnalyzer.topChunks(stats, config.topChunksCount());
             long durationMs = (System.nanoTime() - startNanos) / 1_000_000L;
-            plugin.getLogger().fine("Przeskanowano " + scannedChunks + " chunkow w " + ticksUsed
-                    + " tickach (" + durationMs + " ms zegarowych).");
+            plugin.getLogger().fine("Scanned " + scannedChunks + " chunks across " + ticksUsed
+                    + " ticks (" + durationMs + " ms wall clock).");
             callback.accept(LagEvent.of(tps, mspt, peakMs, scannedChunks, totalEntities, top,
                     durationMs, manual, spark.summary()));
         }

@@ -4,20 +4,20 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Pojedynczy wykryty incydent lagu wraz z kontekstem potrzebnym do zaraportowania go adminowi.
+ * A single detected lag incident together with the context needed to report it to an admin.
  *
- * @param timestamp      moment wykrycia
- * @param tps            TPS z ostatniej minuty
- * @param averageMspt    srednia krocząca MSPT
- * @param peakMs         najdluzszy odstep miedzy tickami w oknie
- * @param loadedChunks   liczba przeskanowanych zaladowanych chunkow
- * @param totalEntities  laczna liczba encji we wszystkich skanowanych swiatach
- * @param topChunks      najbardziej podejrzane chunki, posortowane malejaco
- * @param category       zgadnieta przyczyna (dla chunka nr 1)
- * @param suggestedAction podpowiedz dla admina
- * @param scanDurationMs ile trwalo samo skanowanie chunkow
- * @param manual         czy incydent zostal wywolany recznie komenda {@code /lagwatch report}
- * @param sparkSummary   dodatkowe statystyki ze sparka albo {@code null}, gdy sparka nie ma
+ * @param timestamp       when it was detected
+ * @param tps             one-minute TPS
+ * @param averageMspt     rolling average MSPT
+ * @param peakMs          longest gap between ticks in the window
+ * @param loadedChunks    number of loaded chunks that were scanned
+ * @param totalEntities   total entity count across the scanned worlds
+ * @param topChunks       most suspicious chunks, sorted descending
+ * @param category        guessed cause (for chunk number one)
+ * @param suggestedAction hint for the admin
+ * @param scanDurationMs  how long the chunk scan itself took
+ * @param manual          whether the incident came from {@code /lagwatch report}
+ * @param sparkSummary    extra statistics from spark, or {@code null} when spark is absent
  */
 public record LagEvent(
         Instant timestamp,
@@ -35,19 +35,19 @@ public record LagEvent(
 ) {
 
     /**
-     * Sklada incydent na podstawie wyniku skanowania, samodzielnie ustalajac kategorie i sugestie
-     * na bazie najbardziej podejrzanego chunka.
+     * Assembles an incident from a scan result, working out the category and the suggestion
+     * from the most suspicious chunk.
      *
-     * @param tps            TPS z ostatniej minuty
-     * @param averageMspt    srednia krocząca MSPT
-     * @param peakMs         najdluzszy odstep miedzy tickami
-     * @param loadedChunks   liczba przeskanowanych chunkow
-     * @param totalEntities  laczna liczba encji
-     * @param topChunks      posortowana lista podejrzanych chunkow
-     * @param scanDurationMs czas trwania skanowania
-     * @param manual         czy skan byl reczny
-     * @param sparkSummary   statystyki ze sparka albo {@code null}
-     * @return gotowy do wyslania incydent
+     * @param tps             one-minute TPS
+     * @param averageMspt     rolling average MSPT
+     * @param peakMs          longest gap between ticks
+     * @param loadedChunks    number of scanned chunks
+     * @param totalEntities   total entity count
+     * @param topChunks       sorted list of suspicious chunks
+     * @param scanDurationMs  scan duration
+     * @param manual          whether the scan was manual
+     * @param sparkSummary    spark statistics, or {@code null}
+     * @return incident ready to be reported
      */
     public static LagEvent of(double tps, double averageMspt, double peakMs, int loadedChunks,
                               int totalEntities, List<ChunkStat> topChunks, long scanDurationMs,
@@ -62,7 +62,7 @@ public record LagEvent(
                 List.copyOf(topChunks), category, action, scanDurationMs, manual, sparkSummary);
     }
 
-    /** @return najbardziej podejrzany chunk albo {@code null}, gdy zaden sie nie wyroznil */
+    /** @return most suspicious chunk, or {@code null} when none stood out */
     public ChunkStat primaryChunk() {
         return topChunks.isEmpty() ? null : topChunks.get(0);
     }

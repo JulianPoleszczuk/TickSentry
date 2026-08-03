@@ -9,10 +9,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Wczytuje i udostepnia ustawienia z {@code config.yml}.
+ * Loads and exposes the settings from {@code config.yml}.
  *
- * <p>Pola sa {@code volatile}, poniewaz czyta je zarowno glowny watek serwera
- * (monitor, komendy), jak i watek wysylajacy webhooki.</p>
+ * <p>Fields are {@code volatile} because they are read both by the main server thread
+ * (monitor, commands) and by the webhook delivery thread.</p>
  */
 public final class ConfigManager {
 
@@ -41,9 +41,9 @@ public final class ConfigManager {
     private volatile String dashboardToken;
 
     /**
-     * Tworzy managera i od razu wczytuje konfiguracje z dysku.
+     * Creates the manager and immediately loads the configuration from disk.
      *
-     * @param plugin instancja pluginu, z ktorej pobierany jest {@link FileConfiguration}
+     * @param plugin plugin instance providing the {@link FileConfiguration}
      */
     public ConfigManager(Plugin plugin) {
         this.plugin = plugin;
@@ -51,8 +51,8 @@ public final class ConfigManager {
     }
 
     /**
-     * Ponownie wczytuje {@code config.yml} z dysku i aktualizuje wszystkie ustawienia.
-     * Wartosci spoza rozsadnego zakresu sa przycinane, zeby bledny config nie zawiesil monitora.
+     * Re-reads {@code config.yml} from disk and refreshes every setting.
+     * Values outside a sensible range are clamped, so a broken config cannot wedge the monitor.
      */
     public void reload() {
         plugin.reloadConfig();
@@ -84,100 +84,100 @@ public final class ConfigManager {
         this.topChunksCount = Math.min(25, Math.max(1, cfg.getInt("scan.top-chunks-count", 5)));
     }
 
-    /** @return prog MSPT w milisekundach, powyzej ktorego serwer uznajemy za przeciazony */
+    /** @return MSPT threshold in milliseconds above which the server counts as overloaded */
     public double msptThresholdMs() {
         return msptThresholdMs;
     }
 
-    /** @return liczba sekund nieprzerwanego przekroczenia progu wymagana do wywolania alertu */
+    /** @return seconds of uninterrupted breach required before an alert fires */
     public int sustainedSeconds() {
         return sustainedSeconds;
     }
 
-    /** @return minimalny odstep miedzy alertami w sekundach */
+    /** @return minimum gap between alerts, in seconds */
     public int scanCooldownSeconds() {
         return scanCooldownSeconds;
     }
 
-    /** @return rozmiar okna sredniej kroczacej MSPT wyrazony w tickach */
+    /** @return size of the rolling MSPT average window, in ticks */
     public int rollingAverageTicks() {
         return rollingAverageTicks;
     }
 
-    /** @return czy wysylanie alertow na Discord jest wlaczone i poprawnie skonfigurowane */
+    /** @return whether Discord alerts are enabled and properly configured */
     public boolean discordEnabled() {
         return discordEnabled && !webhookUrl.isEmpty();
     }
 
-    /** @return adres webhooka Discorda (moze byc pusty, jesli nie skonfigurowano) */
+    /** @return Discord webhook address (may be empty when unconfigured) */
     public String webhookUrl() {
         return webhookUrl;
     }
 
-    /** @return ID roli do oznaczenia przy alercie lub pusty ciag, jesli nie ustawiono */
+    /** @return role id to mention on alert, or an empty string when unset */
     public String mentionRoleId() {
         return mentionRoleId;
     }
 
     /**
-     * Sprawdza, czy dany swiat ma byc pomijany przy skanowaniu.
+     * Checks whether a world should be skipped while scanning.
      *
-     * @param worldName nazwa swiata
-     * @return {@code true}, jesli swiat jest na liscie wykluczen
+     * @param worldName world name
+     * @return {@code true} if the world is on the exclusion list
      */
     public boolean isWorldIgnored(String worldName) {
         return ignoredWorlds.contains(worldName.toLowerCase(Locale.ROOT));
     }
 
-    /** @return ile najbardziej podejrzanych chunkow ma zwrocic skaner */
+    /** @return how many suspicious chunks the scanner should return */
     public int topChunksCount() {
         return topChunksCount;
     }
 
-    /** @return czy wysylac osobna wiadomosc po powrocie serwera do normy */
+    /** @return whether to send a separate message once the server recovers */
     public boolean recoveryAlert() {
         return recoveryAlert;
     }
 
-    /** @return ile sekund ponizej progu oznacza koniec incydentu */
+    /** @return how many seconds below the threshold end an incident */
     public int recoverySeconds() {
         return recoverySeconds;
     }
 
-    /** @return czy incydenty maja byc zapisywane na dysk */
+    /** @return whether incidents should be written to disk */
     public boolean storageEnabled() {
         return storageEnabled;
     }
 
-    /** @return po ilu dniach kasowac stare incydenty (0 = nigdy) */
+    /** @return after how many days old incidents are deleted (0 = never) */
     public int storageKeepDays() {
         return storageKeepDays;
     }
 
-    /** @return czy panel webowy ma zostac uruchomiony */
+    /** @return whether the web panel should be started */
     public boolean dashboardEnabled() {
         return dashboardEnabled;
     }
 
-    /** @return adres nasluchu panelu (domyslnie tylko lokalny) */
+    /** @return panel listen address (local only by default) */
     public String dashboardBind() {
         return dashboardBind;
     }
 
-    /** @return port panelu webowego */
+    /** @return web panel port */
     public int dashboardPort() {
         return dashboardPort;
     }
 
-    /** @return token dostepu do panelu; pusty oznacza, ze trzeba go wygenerowac */
+    /** @return panel access token; empty means one has to be generated */
     public String dashboardToken() {
         return dashboardToken;
     }
 
     /**
-     * Zapisuje wygenerowany token panelu do {@code config.yml}, zeby przetrwal restart.
+     * Writes a generated panel token into {@code config.yml} so it survives a restart.
      *
-     * @param token nowy token dostepu
+     * @param token new access token
      */
     public void saveDashboardToken(String token) {
         this.dashboardToken = token;

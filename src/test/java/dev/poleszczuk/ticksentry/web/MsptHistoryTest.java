@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MsptHistoryTest {
 
     @Test
-    @DisplayName("Probki wracaja w kolejnosci chronologicznej")
+    @DisplayName("Samples come back in chronological order")
     void keepsChronologicalOrder() {
         MsptHistory history = new MsptHistory(5);
         history.add(100L, 8.0D, 20.0D);
@@ -26,7 +26,7 @@ class MsptHistoryTest {
     }
 
     @Test
-    @DisplayName("Po zapelnieniu bufora najstarsze probki wypadaja")
+    @DisplayName("Once the buffer is full the oldest samples fall out")
     void oldSamplesFallOut() {
         MsptHistory history = new MsptHistory(3);
         for (long i = 1; i <= 5; i++) {
@@ -36,18 +36,18 @@ class MsptHistoryTest {
         List<MsptHistory.Sample> samples = history.samples();
 
         assertEquals(3, samples.size());
-        assertEquals(300L, samples.get(0).timestampMillis(), "najstarsza zachowana probka");
-        assertEquals(500L, samples.get(2).timestampMillis(), "najnowsza probka");
+        assertEquals(300L, samples.get(0).timestampMillis(), "oldest retained sample");
+        assertEquals(500L, samples.get(2).timestampMillis(), "newest sample");
     }
 
     @Test
-    @DisplayName("Pusty bufor daje pusta tablice JSON")
+    @DisplayName("An empty buffer serialises to an empty JSON array")
     void emptyHistorySerializesToEmptyArray() {
         assertEquals("[]", new MsptHistory(10).toJsonArray());
     }
 
     @Test
-    @DisplayName("Serializacja zawiera czas, mspt i tps kazdej probki")
+    @DisplayName("Serialisation carries time, mspt and tps of every sample")
     void serializesSamples() {
         MsptHistory history = new MsptHistory(4);
         history.add(1700000000000L, 12.34D, 19.87D);
@@ -59,7 +59,7 @@ class MsptHistoryTest {
     }
 
     @Test
-    @DisplayName("Bufor o rozmiarze jeden trzyma tylko ostatnia probke")
+    @DisplayName("A single-slot buffer keeps only the latest sample")
     void singleSlotKeepsLatest() {
         MsptHistory history = new MsptHistory(1);
         history.add(1L, 5.0D, 20.0D);

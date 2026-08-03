@@ -21,11 +21,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
 /**
- * Wysyla alerty na webhook Discorda.
+ * Sends alerts to a Discord webhook.
  *
- * <p>Cala komunikacja sieciowa leci na osobnym watku demona - glowny watek serwera nigdy
- * nie czeka na I/O. Payload budowany jest jednak synchronicznie z gotowego {@link LagEvent},
- * ktory jest niemutowalna migawka danych, wiec nie dotykamy Bukkita spoza glownego watku.</p>
+ * <p>All network traffic runs on a separate daemon thread - the main server thread never waits
+ * on I/O. The payload itself is built synchronously from a finished {@link LagEvent}, which is
+ * an immutable snapshot, so nothing touches Bukkit off the main thread.</p>
  */
 public final class DiscordWebhookClient {
 
@@ -34,7 +34,7 @@ public final class DiscordWebhookClient {
     private static final int COLOR_NOTICE = 0xF1C40F;
     private static final int COLOR_OK = 0x2ECC71;
 
-    /** Ile "innych podejrzanych miejsc" pokazac pod glownym winowajca. */
+    /** How many "other suspicious places" to list below the main culprit. */
     private static final int EXTRA_CHUNKS_SHOWN = 3;
 
     private final Plugin plugin;
@@ -43,8 +43,8 @@ public final class DiscordWebhookClient {
     private final ExecutorService executor;
 
     /**
-     * @param plugin instancja pluginu (log)
-     * @param config zrodlo adresu webhooka i ustawien wzmianki
+     * @param plugin plugin instance (logging)
+     * @param config source of the webhook address and mention settings
      */
     public DiscordWebhookClient(Plugin plugin, ConfigManager config) {
         this.plugin = plugin;
@@ -60,9 +60,9 @@ public final class DiscordWebhookClient {
     }
 
     /**
-     * Buduje i wysyla alert o incydencie. Zwraca natychmiast - wysylka dzieje sie w tle.
+     * Builds and sends an alert about an incident. Returns immediately - delivery happens in the background.
      *
-     * @param event incydent do zaraportowania
+     * @param event incident to report
      */
     public void sendLagAlert(LagEvent event) {
         if (!config.discordEnabled()) {
@@ -74,23 +74,23 @@ public final class DiscordWebhookClient {
     }
 
     /**
-     * Wysyla informacje o powrocie serwera do normy.
+     * Sends a note that the server is healthy again.
      *
-     * @param durationSeconds jak dlugo trwal incydent
-     * @param tps             TPS po powrocie do normy
-     * @param mspt            czas ticku po powrocie do normy
+     * @param durationSeconds how long the incident lasted
+     * @param tps             TPS after recovery
+     * @param mspt            tick time after recovery
      */
     public void sendRecovery(long durationSeconds, double tps, double mspt) {
         if (!config.discordEnabled()) {
             return;
         }
         EmbedBuilder embed = new EmbedBuilder()
-                .title("Serwer wrocil do normy")
+                .title("Server is back to normal")
                 .color(COLOR_OK)
                 .timestamp(java.time.Instant.now())
-                .description("Lag sie skonczyl - serwer znowu wyrabia sie z przetwarzaniem swiata.")
-                .field("Jak dlugo trwal", humanDuration(durationSeconds), true)
-                .field("Teraz", String.format(Locale.ROOT, "TPS: **%.1f** / 20%nCzas ticku: **%.0f ms**", tps, mspt), true)
+                .description("The lag is over - the server keeps up with the world again.")
+                .field("How long it lasted", humanDuration(durationSeconds), true)
+                .field("Right now", String.format(Locale.ROOT, "TPS: **%.1f** / 20%nTick time: **%.0f ms**", tps, mspt), true)
                 .footer("TickSentry");
 
         String payload = "{\"username\":\"TickSentry\",\"allowed_mentions\":{\"parse\":[]},\"embeds\":["
@@ -100,10 +100,10 @@ public final class DiscordWebhookClient {
     }
 
     /**
-     * Zamienia liczbe sekund na opis typu "4 min 12 s".
+     * Turns a number of seconds into wording like "4 min 12 s".
      *
-     * @param seconds czas trwania w sekundach
-     * @return czytelny opis
+     * @param seconds duration in seconds
+     * @return readable description
      */
     static String humanDuration(long seconds) {
         if (seconds < 60L) {
@@ -118,7 +118,7 @@ public final class DiscordWebhookClient {
         return hours + " h " + (minutes % 60L) + " min";
     }
 
-    /** Zamyka watek wysylkowy, dajac chwile na dokonczenie zaleglych zadan. */
+    /** Shuts down the delivery thread, allowing a moment to finish pending work. */
     public void shutdown() {
         executor.shutdown();
         try {
@@ -131,7 +131,7 @@ public final class DiscordWebhookClient {
         }
     }
 
-    /** Wysyla gotowy payload, z jedna ponowna proba przy limicie zapytan Discorda. */
+    /** Sends a finished payload, retrying once when Discord applies a rate limit. */
     private void post(String url, String payload) {
         try {
             HttpResponse<String> response = execute(url, payload);
@@ -149,13 +149,13 @@ public final class DiscordWebhookClient {
                 response = execute(url, payload);
             }
             if (response.statusCode() / 100 != 2) {
-                plugin.getLogger().warning("Discord odrzucil alert (HTTP " + response.statusCode() + "): "
+                plugin.getLogger().warning("Discord rejected the alert (HTTP " + response.statusCode() + "): "
                         + response.body());
             }
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         } catch (Exception ex) {
-            plugin.getLogger().log(Level.WARNING, "Nie udalo sie wyslac alertu na Discorda", ex);
+            plugin.getLogger().log(Level.WARNING, "Could not deliver the alert to Discord", ex);
         }
     }
 
@@ -170,10 +170,10 @@ public final class DiscordWebhookClient {
     }
 
     /**
-     * Sklada pelne cialo zadania webhooka wraz z embedem i opcjonalna wzmianka roli.
+     * Assembles the full webhook request body with the embed and an optional role mention.
      *
-     * @param event incydent do opisania
-     * @return JSON gotowy do wyslania
+     * @param event incident to describe
+     * @return JSON ready to send
      */
     String buildPayload(LagEvent event) {
         StringBuilder json = new StringBuilder("{\"username\":\"TickSentry\"");
@@ -191,40 +191,40 @@ public final class DiscordWebhookClient {
     }
 
     /**
-     * Zamienia incydent na embed napisany jezykiem admina, bez zargonu profilerowego.
+     * Turns an incident into an embed written for an admin, free of profiler jargon.
      *
-     * @param event incydent do opisania
-     * @return gotowy builder embeda
+     * @param event incident to describe
+     * @return finished embed builder
      */
     EmbedBuilder buildEmbed(LagEvent event) {
         ChunkStat primary = event.primaryChunk();
         boolean healthy = event.manual() && event.averageMspt() <= config.msptThresholdMs();
 
         EmbedBuilder embed = new EmbedBuilder()
-                .title(healthy ? "Raport na zadanie: serwer wyglada zdrowo" : title(event))
+                .title(healthy ? "Requested report: the server looks healthy" : title(event))
                 .color(healthy ? COLOR_OK : color(event.tps()))
                 .timestamp(event.timestamp())
-                .footer("TickSentry - przeskanowano " + event.loadedChunks() + " chunkow, lacznie "
-                        + event.totalEntities() + " encji");
+                .footer("TickSentry - scanned " + event.loadedChunks() + " chunks, "
+                        + event.totalEntities() + " entities in total");
 
         embed.description(healthy
-                ? "Sprawdzono na zadanie admina. Serwer wyrabia sie z przetwarzaniem swiata."
-                : "Serwer nie wyrabia sie z przetwarzaniem swiata - gracze moga odczuwac opoznienia.\n"
-                + "**Prawdopodobna przyczyna: " + event.category().title() + "** ("
+                ? "Checked on an admin's request. The server keeps up with the world."
+                : "The server cannot keep up with the world - players may feel the delay.\n"
+                + "**Likely cause: " + event.category().title() + "** ("
                 + event.category().description().toLowerCase(Locale.ROOT) + ")");
 
-        embed.field("Kondycja serwera", String.format(Locale.ROOT,
-                "TPS: **%.1f** / 20%nCzas ticku: **%.0f ms** (norma do %.0f ms)%nNajdluzsza zwiecha: **%.0f ms**",
+        embed.field("Server health", String.format(Locale.ROOT,
+                "TPS: **%.1f** / 20%nTick time: **%.0f ms** (threshold %.0f ms)%nLongest freeze: **%.0f ms**",
                 event.tps(), event.averageMspt(), config.msptThresholdMs(), event.peakMs()), true);
 
         if (primary != null) {
-            embed.field("Gdzie szukac", describe(primary), true);
+            embed.field("Where to look", describe(primary), true);
         }
 
-        embed.field("Co z tym zrobic", event.suggestedAction(), false);
+        embed.field("What to do", event.suggestedAction(), false);
 
         if (event.sparkSummary() != null) {
-            embed.field("Dokladniejszy pomiar", event.sparkSummary(), false);
+            embed.field("More precise measurement", event.sparkSummary(), false);
         }
 
         List<ChunkStat> others = event.topChunks().stream().skip(1).limit(EXTRA_CHUNKS_SHOWN).toList();
@@ -232,17 +232,17 @@ public final class DiscordWebhookClient {
             StringBuilder list = new StringBuilder();
             for (ChunkStat stat : others) {
                 list.append("- ").append(stat.prettyLocation())
-                        .append(" (").append(stat.entityCount()).append(" encji, ")
-                        .append(stat.tileEntityCount()).append(" block-entity)\n");
+                        .append(" (").append(stat.entityCount()).append(" entities, ")
+                        .append(stat.tileEntityCount()).append(" block entities)\n");
             }
-            embed.field("Inne podejrzane miejsca", list.toString(), false);
+            embed.field("Other suspicious places", list.toString(), false);
         }
 
         return embed;
     }
 
     private static String title(LagEvent event) {
-        return event.manual() ? "Raport na zadanie: serwer laguje" : "Uwaga: serwer laguje";
+        return event.manual() ? "Requested report: the server is lagging" : "Heads up: the server is lagging";
     }
 
     private static int color(double tps) {
@@ -255,19 +255,20 @@ public final class DiscordWebhookClient {
         return COLOR_NOTICE;
     }
 
-    /** Opisuje chunk w formie zrozumialej dla admina: lokalizacja plus dwa najliczniejsze typy. */
+    /** Describes a chunk the way an admin needs it: location plus the two most common types. */
     private static String describe(ChunkStat stat) {
         StringBuilder text = new StringBuilder(stat.prettyLocation()).append('\n');
         List<String> parts = new ArrayList<>();
         parts.addAll(topTypes(stat.entityTypeCounts(), 2));
         parts.addAll(topTypes(stat.tileTypeCounts(), 1));
         if (parts.isEmpty()) {
-            text.append(stat.entityCount()).append(" encji, ").append(stat.tileEntityCount()).append(" block-entity");
+            text.append(stat.entityCount()).append(" entities, ")
+                    .append(stat.tileEntityCount()).append(" block entities");
         } else {
             text.append(String.join("\n", parts));
         }
         if (stat.playerCount() > 0) {
-            text.append("\ngraczy w chunku: ").append(stat.playerCount());
+            text.append("\nplayers in chunk: ").append(stat.playerCount());
         }
         return text.toString();
     }

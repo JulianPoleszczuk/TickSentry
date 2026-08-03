@@ -15,8 +15,8 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * Historia incydentow trzymana w pamieci - zapasowy sklad, gdy zapis na dysk jest wylaczony
- * albo baza nie da sie otworzyc. Znika przy restarcie serwera.
+ * Incident history kept in memory - the fallback store, used when writing to disk is disabled
+ * or the database cannot be opened. It disappears when the server restarts.
  */
 public final class MemoryAlertStore implements AlertStore {
 
@@ -24,7 +24,7 @@ public final class MemoryAlertStore implements AlertStore {
     private final int capacity;
 
     /**
-     * @param capacity ile ostatnich incydentow przechowywac
+     * @param capacity how many recent incidents to keep
      */
     public MemoryAlertStore(int capacity) {
         this.capacity = Math.max(1, capacity);
@@ -69,12 +69,12 @@ public final class MemoryAlertStore implements AlertStore {
 
     @Override
     public String describe() {
-        return "pamiec (znika po restarcie)";
+        return "memory (lost on restart)";
     }
 
     @Override
     public void close() {
-        // Nic do zamkniecia.
+        // Nothing to close.
     }
 
     private synchronized List<StoredIncident> snapshot(int limit) {

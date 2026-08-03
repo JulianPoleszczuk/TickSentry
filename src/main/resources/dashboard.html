@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pl">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -24,15 +24,12 @@
   .wrap { max-width: 1000px; margin: 0 auto; }
   header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
   h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
-  .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-  .badge.ok { background: rgba(61,220,132,.15); color: var(--ok); }
-  .badge.bad { background: rgba(231,76,60,.15); color: var(--bad); }
-  .badge.off { background: rgba(139,147,163,.15); color: var(--muted); }
   .stamp { color: var(--muted); font-size: 13px; margin-left: auto; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
   .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
   .card .value { font-size: 26px; font-weight: 650; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .card .value.bad { color: var(--bad); }
   .card .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
   section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
   section h2 { font-size: 14px; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
@@ -53,31 +50,30 @@
 <div class="wrap">
   <header>
     <h1>TickSentry</h1>
-    <span id="state" class="badge off">laczenie...</span>
     <span id="stamp" class="stamp"></span>
   </header>
 
   <div id="error" class="err"></div>
 
   <div class="grid">
-    <div class="card"><div class="label">TPS</div><div class="value" id="tps">-</div><div class="sub">z 20</div></div>
-    <div class="card"><div class="label">Czas ticku</div><div class="value" id="mspt">-</div><div class="sub" id="threshold"></div></div>
-    <div class="card"><div class="label">Najdluzsza zwiecha</div><div class="value" id="peak">-</div><div class="sub">w oknie pomiarowym</div></div>
-    <div class="card"><div class="label">Gracze</div><div class="value" id="players">-</div><div class="sub">online</div></div>
-    <div class="card"><div class="label">Incydenty</div><div class="value" id="inc24">-</div><div class="sub">ostatnia doba</div></div>
+    <div class="card"><div class="label">TPS</div><div class="value" id="tps">-</div><div class="sub">of 20</div></div>
+    <div class="card"><div class="label">Tick time</div><div class="value" id="mspt">-</div><div class="sub" id="threshold"></div></div>
+    <div class="card"><div class="label">Longest freeze</div><div class="value" id="peak">-</div><div class="sub">in sample window</div></div>
+    <div class="card"><div class="label">Players</div><div class="value" id="players">-</div><div class="sub">online</div></div>
+    <div class="card"><div class="label">Incidents</div><div class="value" id="inc24">-</div><div class="sub">last 24 hours</div></div>
   </div>
 
   <section>
-    <h2>Czas ticku (ostatnia godzina)</h2>
+    <h2>Tick time (last hour)</h2>
     <canvas id="chart"></canvas>
   </section>
 
   <section>
-    <h2>Ostatnie incydenty</h2>
+    <h2>Recent incidents</h2>
     <div class="scroll">
       <table>
-        <thead><tr><th>Kiedy</th><th>Czas ticku</th><th>Przyczyna</th><th>Gdzie</th></tr></thead>
-        <tbody id="incidents"><tr><td colspan="4" class="empty">Wczytywanie...</td></tr></tbody>
+        <thead><tr><th>When</th><th>Tick time</th><th>Cause</th><th>Where</th></tr></thead>
+        <tbody id="incidents"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody>
       </table>
     </div>
   </section>
@@ -100,13 +96,6 @@ function showError(message) {
   box.style.display = message ? "block" : "none";
 }
 
-function paintState(live) {
-  const badge = $("state");
-  if (!live.monitoring) { badge.className = "badge off"; badge.textContent = "monitoring wylaczony"; }
-  else if (live.inIncident) { badge.className = "badge bad"; badge.textContent = "trwa lag"; }
-  else { badge.className = "badge ok"; badge.textContent = "serwer zdrowy"; }
-}
-
 function drawChart(points, threshold) {
   const canvas = $("chart");
   const ratio = window.devicePixelRatio || 1;
@@ -122,7 +111,7 @@ function drawChart(points, threshold) {
 
   if (!points.length) {
     ctx.fillStyle = muted; ctx.font = "13px system-ui";
-    ctx.fillText("Zbieranie probek...", 12, height / 2);
+    ctx.fillText("Collecting samples...", 12, height / 2);
     return;
   }
 
@@ -131,7 +120,8 @@ function drawChart(points, threshold) {
   const x = i => (i / Math.max(1, points.length - 1)) * (width - 8) + 4;
   const y = v => height - 18 - (v / max) * (height - 30);
 
-  // Siatka i podpisy osi. Zera nie podpisujemy - to dolna krawedz, a etykieta nachodzilaby na wykres.
+  // Grid and axis labels. Zero is left unlabelled - it sits on the bottom edge
+  // where the label would overlap the plotted line.
   ctx.strokeStyle = lineColor; ctx.fillStyle = muted;
   ctx.font = "11px system-ui"; ctx.lineWidth = 1;
   for (let i = 1; i <= 2; i++) {
@@ -140,13 +130,13 @@ function drawChart(points, threshold) {
     ctx.fillText(value.toFixed(0) + " ms", 4, py - 3);
   }
 
-  // Linia progu alarmowego.
+  // Alert threshold.
   ctx.strokeStyle = css.getPropertyValue("--warn").trim();
   ctx.setLineDash([4, 4]); ctx.beginPath();
   ctx.moveTo(0, y(threshold)); ctx.lineTo(width, y(threshold)); ctx.stroke();
   ctx.setLineDash([]);
 
-  // Wykres czasu ticku.
+  // Tick time line.
   ctx.strokeStyle = css.getPropertyValue("--accent").trim();
   ctx.lineWidth = 2; ctx.beginPath();
   points.forEach((p, i) => i ? ctx.lineTo(x(i), y(p.mspt)) : ctx.moveTo(x(i), y(p.mspt)));
@@ -158,30 +148,30 @@ function refreshLive() {
     const live = data.live;
     $("tps").textContent = live.tps.toFixed(1);
     $("mspt").textContent = live.mspt.toFixed(1) + " ms";
-    $("threshold").textContent = "prog " + live.threshold.toFixed(0) + " ms";
+    $("mspt").className = "value" + (live.mspt > live.threshold ? " bad" : "");
+    $("threshold").textContent = "threshold " + live.threshold.toFixed(0) + " ms";
     $("peak").textContent = live.peakMs.toFixed(0) + " ms";
     $("players").textContent = live.players;
     $("inc24").textContent = live.incidents24h;
-    $("stamp").textContent = "aktualizacja " + new Date(live.generatedAt).toLocaleTimeString("pl-PL");
+    $("stamp").textContent = "updated " + new Date(live.generatedAt).toLocaleTimeString();
     $("spark").textContent = live.spark || "";
-    paintState(live);
     drawChart(data.chart, live.threshold);
     showError("");
-  }).catch(e => showError("Brak polaczenia z serwerem (" + e.message + "). Sprawdz, czy token w adresie jest poprawny."));
+  }).catch(e => showError("Cannot reach the server (" + e.message + "). Check that the token in the address is correct."));
 }
 
 function refreshIncidents() {
   return api("/api/incidents").then(list => {
     const body = $("incidents");
     if (!list.length) {
-      body.innerHTML = '<tr><td colspan="4" class="empty">Nie zapisano jeszcze zadnego incydentu.</td></tr>';
+      body.innerHTML = '<tr><td colspan="4" class="empty">No incidents recorded yet.</td></tr>';
       return;
     }
     body.innerHTML = list.map(i => {
-      const when = new Date(i.at).toLocaleString("pl-PL", { day: "2-digit", month: "2-digit",
+      const when = new Date(i.at).toLocaleString(undefined, { day: "2-digit", month: "2-digit",
         hour: "2-digit", minute: "2-digit" });
       const where = i.world ? i.world + " @ " + i.x + ", " + i.z : "-";
-      const manual = i.manual ? " (recznie)" : "";
+      const manual = i.manual ? " (manual)" : "";
       return "<tr><td class='num'>" + when + manual + "</td><td class='num'>" + i.mspt.toFixed(0)
         + " ms</td><td>" + i.category + "</td><td>" + where + "</td></tr>";
     }).join("");

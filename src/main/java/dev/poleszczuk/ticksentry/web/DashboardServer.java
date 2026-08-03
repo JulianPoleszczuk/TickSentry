@@ -15,24 +15,25 @@ import java.util.concurrent.Executors;
 import java.util.logging.Level;
 
 /**
- * Wbudowany panel webowy z podgladem kondycji serwera.
+ * Built-in web panel showing server health.
  *
- * <p>Korzysta z {@link HttpServer} dostarczanego przez JDK, wiec nie dokłada zadnej zaleznosci.
- * Panel dziala na tej samej maszynie co serwer gry - nie ma zadnej uslugi zewnetrznej,
- * niczego nie trzeba hostowac.</p>
+ * <p>Runs on the {@link HttpServer} shipped with the JDK, so it adds no dependency. The panel
+ * lives on the same machine as the game server - there is no external service and nothing to
+ * host anywhere.</p>
  *
- * <p><b>Watki:</b> handlery HTTP dzialaja poza glownym watkiem serwera, dlatego nie siegaja
- * po Bukkit API ani po baze. Czytaja wylacznie gotowe migawki, ktore podaje im glowny watek
- * przez {@link #update(LiveSnapshot)} i {@link #updateIncidents(String)}.</p>
+ * <p><b>Threading:</b> HTTP handlers run off the main server thread, so they never touch the
+ * Bukkit API or the database. They only read prepared snapshots handed to them by the main
+ * thread through {@link #update(LiveSnapshot)} and {@link #updateIncidents(String)}.</p>
  *
- * <p><b>Bezpieczenstwo:</b> kazde zadanie musi podac token (parametr {@code ?token=} albo
- * naglowek {@code X-Auth-Token}). Polaczenie idzie czystym HTTP, wiec domyslna konfiguracja
- * nasluchuje tylko na {@code 127.0.0.1}. Wystawienie panelu na swiat wymaga postawienia przed
- * nim reverse proxy z HTTPS - inaczej token leci otwartym tekstem.</p>
+ * <p><b>Security:</b> every request must present a token (either {@code ?token=} or the
+ * {@code X-Auth-Token} header). The connection is plain HTTP, which is why the default
+ * configuration listens on {@code 127.0.0.1} only. Exposing the panel to the outside world
+ * requires a reverse proxy with HTTPS in front of it - otherwise the token travels in clear
+ * text.</p>
  */
 public final class DashboardServer {
 
-    /** Ile watkow obsluguje zadania HTTP - panel jest jednoosobowy, wiecej nie potrzeba. */
+    /** Threads serving HTTP requests - the panel has a handful of users at most. */
     private static final int HTTP_THREADS = 2;
 
     private final Plugin plugin;
@@ -45,9 +46,9 @@ public final class DashboardServer {
     private HttpServer server;
 
     /**
-     * @param plugin  instancja pluginu (log)
-     * @param token   token wymagany przy kazdym zadaniu
-     * @param history bufor probek zasilajacy wykres
+     * @param plugin  plugin instance (logging)
+     * @param token   token required on every request
+     * @param history sample buffer feeding the chart
      */
     public DashboardServer(Plugin plugin, String token, MsptHistory history) {
         this.plugin = plugin;
@@ -57,11 +58,11 @@ public final class DashboardServer {
     }
 
     /**
-     * Uruchamia serwer HTTP.
+     * Starts the HTTP server.
      *
-     * @param bind adres nasluchu, np. {@code 127.0.0.1}
-     * @param port port nasluchu
-     * @return {@code true}, jesli panel wystartowal
+     * @param bind listen address, for example {@code 127.0.0.1}
+     * @param port listen port
+     * @return {@code true} if the panel came up
      */
     public boolean start(String bind, int port) {
         try {
@@ -75,15 +76,15 @@ public final class DashboardServer {
                 return thread;
             }));
             server.start();
-            plugin.getLogger().info("Panel webowy: http://" + bind + ":" + port + "/?token=" + token);
+            plugin.getLogger().info("Web panel: http://" + bind + ":" + port + "/?token=" + token);
             return true;
         } catch (IOException | RuntimeException ex) {
-            plugin.getLogger().log(Level.WARNING, "Nie udalo sie uruchomic panelu webowego", ex);
+            plugin.getLogger().log(Level.WARNING, "Could not start the web panel", ex);
             return false;
         }
     }
 
-    /** Zatrzymuje serwer HTTP. */
+    /** Stops the HTTP server. */
     public void stop() {
         if (server != null) {
             server.stop(0);
@@ -92,31 +93,31 @@ public final class DashboardServer {
     }
 
     /**
-     * Podmienia migawke pokazywana w panelu.
+     * Replaces the snapshot shown by the panel.
      *
-     * @param snapshot swieza migawka zebrana na glownym watku
+     * @param snapshot fresh snapshot taken on the main thread
      */
     public void update(LiveSnapshot snapshot) {
         this.snapshot = snapshot;
     }
 
     /**
-     * Podmienia liste ostatnich incydentow.
+     * Replaces the list of recent incidents.
      *
-     * @param json gotowa tablica JSON z incydentami
+     * @param json ready JSON array of incidents
      */
     public void updateIncidents(String json) {
         this.incidentsJson = json;
     }
 
-    /** Sklada odpowiedz dla {@code /api/live}: biezacy stan plus punkty do wykresu. */
+    /** Builds the {@code /api/live} response: current state plus chart points. */
     private String liveJson() {
         return "{\"live\":" + snapshot.toJson() + ",\"chart\":" + history.toJsonArray() + "}";
     }
 
     private void handlePage(HttpExchange exchange) throws IOException {
         if (!authorized(exchange)) {
-            respond(exchange, 401, "text/plain; charset=utf-8", "Brak lub bledny token.");
+            respond(exchange, 401, "text/plain; charset=utf-8", "Missing or invalid token.");
             return;
         }
         respond(exchange, 200, "text/html; charset=utf-8", page);
@@ -130,7 +131,7 @@ public final class DashboardServer {
         respond(exchange, 200, "application/json; charset=utf-8", body.get());
     }
 
-    /** Sprawdza token z parametru zapytania albo z naglowka, odporny na roznice czasu porownania. */
+    /** Checks the token from the query string or the header, using a constant-time comparison. */
     private boolean authorized(HttpExchange exchange) {
         String provided = exchange.getRequestHeaders().getFirst("X-Auth-Token");
         if (provided == null) {
@@ -161,7 +162,7 @@ public final class DashboardServer {
         Headers headers = exchange.getResponseHeaders();
         headers.set("Content-Type", contentType);
         headers.set("Cache-Control", "no-store");
-        // Panel jest lokalny i nie ma byc osadzany ani odpytywany z innych stron.
+        // The panel is local and is not meant to be embedded or fetched from other pages.
         headers.set("X-Frame-Options", "DENY");
         headers.set("X-Content-Type-Options", "nosniff");
         exchange.sendResponseHeaders(status, bytes.length);
@@ -170,23 +171,23 @@ public final class DashboardServer {
         }
     }
 
-    /** Wczytuje strone panelu z zasobow jara. */
+    /** Loads the panel page from the jar resources. */
     private String loadPage() {
         try (InputStream in = getClass().getClassLoader().getResourceAsStream("dashboard.html")) {
             if (in == null) {
-                return "<h1>Brak dashboard.html w jarze</h1>";
+                return "<h1>dashboard.html missing from the jar</h1>";
             }
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException ex) {
-            plugin.getLogger().log(Level.WARNING, "Nie udalo sie wczytac strony panelu", ex);
-            return "<h1>Blad wczytywania panelu</h1>";
+            plugin.getLogger().log(Level.WARNING, "Could not load the panel page", ex);
+            return "<h1>Failed to load the panel</h1>";
         }
     }
 
     /**
-     * Generuje losowy token dostepu.
+     * Generates a random access token.
      *
-     * @return token zapisywany potem w config.yml
+     * @return token, later stored in config.yml
      */
     public static String generateToken() {
         byte[] bytes = new byte[16];
@@ -198,7 +199,7 @@ public final class DashboardServer {
         return hex.toString();
     }
 
-    /** Dostawca tresci odpowiedzi - wlasny odpowiednik {@code Supplier<String>} rzucajacy IO. */
+    /** Response body supplier - a local stand-in for {@code Supplier<String>}. */
     @FunctionalInterface
     private interface Supplier {
         String get();

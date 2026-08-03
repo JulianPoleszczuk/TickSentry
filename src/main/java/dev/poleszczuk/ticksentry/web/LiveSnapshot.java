@@ -3,22 +3,23 @@ package dev.poleszczuk.ticksentry.web;
 import dev.poleszczuk.ticksentry.util.Json;
 
 /**
- * Migawka stanu serwera przygotowana dla dashboardu.
+ * Snapshot of server state prepared for the dashboard.
  *
- * <p>Kluczowy powod istnienia tej klasy: watek HTTP <b>nie moze</b> siegac po Bukkit API.
- * Migawke sklada glowny watek co kilka sekund, a handler HTTP tylko ja odczytuje.</p>
+ * <p>The reason this class exists: an HTTP thread <b>must not</b> reach into the Bukkit API.
+ * The snapshot is assembled by the main thread every few seconds, and the HTTP handler only
+ * reads it.</p>
  *
- * @param tps            aktualny TPS
- * @param mspt           sredni czas ticku
- * @param peakMs         najdluzsza zwiecha w oknie pomiarowym
- * @param threshold      prog alarmowy z konfiguracji
- * @param players        liczba graczy online
- * @param monitoring     czy monitor tickow dziala
- * @param inIncident     czy trwa niezakonczony incydent
- * @param incidents24h   liczba incydentow z ostatniej doby
- * @param lastCategory   przyczyna ostatniego incydentu lub {@code null}
- * @param sparkSummary   statystyki ze sparka lub {@code null}
- * @param generatedAt    moment zebrania migawki
+ * @param tps          current TPS
+ * @param mspt         average tick time
+ * @param peakMs       longest freeze in the sample window
+ * @param threshold    alert threshold from the configuration
+ * @param players      number of players online
+ * @param monitoring   whether the tick monitor is running
+ * @param inIncident   whether an unfinished incident is in progress
+ * @param incidents24h number of incidents in the last 24 hours
+ * @param lastCategory cause of the last incident, or {@code null}
+ * @param sparkSummary statistics from spark, or {@code null}
+ * @param generatedAt  when the snapshot was taken
  */
 public record LiveSnapshot(
         double tps,
@@ -34,16 +35,16 @@ public record LiveSnapshot(
         long generatedAt
 ) {
 
-    /** @return migawka zastepcza, uzywana zanim powstanie pierwszy prawdziwy pomiar */
+    /** @return placeholder snapshot, used before the first real measurement exists */
     public static LiveSnapshot empty() {
         return new LiveSnapshot(20.0D, 0.0D, 0.0D, 50.0D, 0, false, false, 0, null, null,
                 System.currentTimeMillis());
     }
 
     /**
-     * Serializuje migawke do JSON-a.
+     * Serialises the snapshot to JSON.
      *
-     * @return obiekt JSON dla endpointu {@code /api/live}
+     * @return JSON object for the {@code /api/live} endpoint
      */
     public String toJson() {
         return "{"

@@ -6,40 +6,40 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * Sklad incydentow. Implementacja moze trzymac je w pamieci albo w bazie na dysku.
+ * Store of incidents. An implementation may keep them in memory or in a file-backed database.
  *
- * <p>Odczyty sa asynchroniczne z zalozenia - implementacja dyskowa nie moze blokowac
- * glownego watku na I/O. Wyniki wracaja callbackiem <b>zawsze na glownym watku</b>,
- * dzieki czemu wolno z nich pisac do gracza i siegac po Bukkit API.</p>
+ * <p>Reads are asynchronous by design - a disk-backed implementation must not block the main
+ * thread on I/O. Results come back through a callback <b>always on the main thread</b>, so they
+ * are free to message players and touch the Bukkit API.</p>
  */
 public interface AlertStore {
 
     /**
-     * Zapisuje incydent.
+     * Records an incident.
      *
-     * @param event incydent do zapamietania
+     * @param event incident to remember
      */
     void record(LagEvent event);
 
     /**
-     * Pobiera najnowsze incydenty.
+     * Fetches the most recent incidents.
      *
-     * @param limit    maksymalna liczba wynikow
-     * @param callback odbiorca listy (glowny watek), od najnowszego
+     * @param limit    maximum number of results
+     * @param callback receiver of the list (main thread), newest first
      */
     void recent(int limit, Consumer<List<StoredIncident>> callback);
 
     /**
-     * Liczy podsumowanie z ostatnich dni.
+     * Computes a summary of the last few days.
      *
-     * @param days     ile dni wstecz analizowac
-     * @param callback odbiorca wyniku (glowny watek)
+     * @param days     how many days back to analyse
+     * @param callback receiver of the result (main thread)
      */
     void stats(int days, Consumer<IncidentStats> callback);
 
-    /** @return krotki opis rodzaju skladu, pokazywany w {@code /lagwatch status} */
+    /** @return short description of the store type, shown in {@code /lagwatch status} */
     String describe();
 
-    /** Zamyka sklad, konczac zalegle zapisy. */
+    /** Closes the store, finishing pending writes. */
     void close();
 }

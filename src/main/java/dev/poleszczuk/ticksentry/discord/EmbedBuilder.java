@@ -7,18 +7,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Buduje JSON embeda Discorda bez zadnej biblioteki do serializacji.
+ * Builds a Discord embed as JSON without any serialisation library.
  *
- * <p>Zakres pol jest celowo minimalny - tyle, ile potrzebuje alert TickSentry.
- * Wszystkie wartosci przechodza przez {@link #escape(String)}, wiec tresc z gry
- * (nazwy swiatow, typy mobow) nie zepsuje payloadu.</p>
+ * <p>The set of supported fields is deliberately minimal - just what a TickSentry alert needs.
+ * Every value goes through {@link #escape(String)}, so content coming from the game (world names,
+ * mob types) cannot break the payload.</p>
  */
 public final class EmbedBuilder {
 
-    /** Discord odrzuca embed z opisem dluzszym niz 4096 znakow. */
+    /** Discord rejects an embed whose description exceeds 4096 characters. */
     private static final int MAX_DESCRIPTION = 4000;
 
-    /** Limit dlugosci wartosci pojedynczego pola embeda. */
+    /** Length limit for the value of a single embed field. */
     private static final int MAX_FIELD_VALUE = 1000;
 
     private String title;
@@ -29,8 +29,8 @@ public final class EmbedBuilder {
     private final List<String> fields = new ArrayList<>();
 
     /**
-     * @param title naglowek embeda
-     * @return ten sam builder
+     * @param title embed heading
+     * @return this builder
      */
     public EmbedBuilder title(String title) {
         this.title = title;
@@ -38,8 +38,8 @@ public final class EmbedBuilder {
     }
 
     /**
-     * @param description tekst pod naglowkiem
-     * @return ten sam builder
+     * @param description text below the heading
+     * @return this builder
      */
     public EmbedBuilder description(String description) {
         this.description = truncate(description, MAX_DESCRIPTION);
@@ -47,8 +47,8 @@ public final class EmbedBuilder {
     }
 
     /**
-     * @param color kolor paska embeda jako liczba RGB (np. 0xE74C3C)
-     * @return ten sam builder
+     * @param color embed side bar colour as an RGB number (e.g. 0xE74C3C)
+     * @return this builder
      */
     public EmbedBuilder color(int color) {
         this.color = color;
@@ -56,12 +56,12 @@ public final class EmbedBuilder {
     }
 
     /**
-     * Dodaje pole embeda.
+     * Adds an embed field.
      *
-     * @param name   nazwa pola
-     * @param value  tresc pola
-     * @param inline czy pole ma stac obok poprzedniego
-     * @return ten sam builder
+     * @param name   field name
+     * @param value  field content
+     * @param inline whether the field sits next to the previous one
+     * @return this builder
      */
     public EmbedBuilder field(String name, String value, boolean inline) {
         fields.add("{\"name\":\"" + escape(name) + "\",\"value\":\""
@@ -70,8 +70,8 @@ public final class EmbedBuilder {
     }
 
     /**
-     * @param footer stopka embeda
-     * @return ten sam builder
+     * @param footer embed footer
+     * @return this builder
      */
     public EmbedBuilder footer(String footer) {
         this.footer = footer;
@@ -79,8 +79,8 @@ public final class EmbedBuilder {
     }
 
     /**
-     * @param timestamp znacznik czasu pokazywany przez Discorda przy stopce
-     * @return ten sam builder
+     * @param timestamp timestamp Discord shows next to the footer
+     * @return this builder
      */
     public EmbedBuilder timestamp(Instant timestamp) {
         this.timestamp = timestamp;
@@ -88,9 +88,9 @@ public final class EmbedBuilder {
     }
 
     /**
-     * Serializuje embed do JSON-a.
+     * Serialises the embed to JSON.
      *
-     * @return obiekt JSON gotowy do wstawienia w tablice {@code embeds}
+     * @return JSON object ready to place inside the {@code embeds} array
      */
     public String toJson() {
         StringBuilder json = new StringBuilder("{");
@@ -131,10 +131,10 @@ public final class EmbedBuilder {
     }
 
     /**
-     * Escapuje tekst zgodnie z wymaganiami JSON-a.
+     * Escapes text according to JSON rules.
      *
-     * @param text tekst wejsciowy, moze byc {@code null}
-     * @return tekst bezpieczny do wstawienia miedzy cudzyslowy
+     * @param text input text, may be {@code null}
+     * @return text safe to place between quotes
      */
     public static String escape(String text) {
         return Json.escape(text);

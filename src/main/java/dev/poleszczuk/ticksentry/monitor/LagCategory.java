@@ -1,28 +1,28 @@
 package dev.poleszczuk.ticksentry.monitor;
 
 /**
- * Prawdopodobna przyczyna lagu przypisana do konkretnego chunka.
- * Opisy sa celowo napisane jezykiem admina, nie profilera.
+ * Likely cause of lag attributed to a specific chunk.
+ * Wording is deliberately aimed at server admins, not at profiler users.
  */
 public enum LagCategory {
 
-    /** Duzo encji jednego typu - klasyczna farma mobow lub niezabity spawn. */
-    MOB_FARM("Farma mobow", "Duzo encji tego samego typu w jednym miejscu"),
+    /** Many entities of a single type - a mob farm or a spawner nobody cleaned up. */
+    MOB_FARM("Mob farm", "Lots of entities of the same type in one place"),
 
-    /** Zalegajace przedmioty i kule doswiadczenia. */
-    ITEM_CLUTTER("Zalegajace przedmioty", "Setki itemow lub kul XP lezacych na ziemi"),
+    /** Dropped items and experience orbs piling up. */
+    ITEM_CLUTTER("Dropped items", "Hundreds of items or XP orbs lying on the ground"),
 
-    /** Duzo block-entity, zwykle hoppery, droppery i sortownie. */
-    REDSTONE("Redstone / hoppery", "Duzo urzadzen typu hopper, dropper czy piec"),
+    /** Many block entities, usually hoppers, droppers and sorting systems. */
+    REDSTONE("Redstone / hoppers", "Lots of hoppers, droppers or furnaces"),
 
-    /** Skupisko graczy, np. spawn albo bitwa na arenie. */
-    PLAYER_CLUSTER("Skupisko graczy", "Wielu graczy w jednym chunku"),
+    /** A crowd of players, for example spawn or an arena fight. */
+    PLAYER_CLUSTER("Player crowd", "Many players inside a single chunk"),
 
-    /** Duzo encji, ale bez jednego wyraznie dominujacego typu. */
-    ENTITY_OVERLOAD("Przeciazenie encjami", "Bardzo duzo roznych encji naraz"),
+    /** Many entities, but without one clearly dominant type. */
+    ENTITY_OVERLOAD("Entity overload", "A large mix of different entities at once"),
 
-    /** Nie udalo sie wskazac oczywistego winowajcy. */
-    UNKNOWN("Nieoczywiste zrodlo", "Zaden chunk nie wyroznia sie wyraznie");
+    /** No obvious culprit could be identified. */
+    UNKNOWN("No obvious source", "No chunk stands out clearly");
 
     private final String title;
     private final String description;
@@ -32,12 +32,12 @@ public enum LagCategory {
         this.description = description;
     }
 
-    /** @return krotka nazwa kategorii do wyswietlenia */
+    /** @return short display name of the category */
     public String title() {
         return title;
     }
 
-    /** @return jednozdaniowe wyjasnienie dla admina */
+    /** @return one-sentence explanation for the admin */
     public String description() {
         return description;
     }

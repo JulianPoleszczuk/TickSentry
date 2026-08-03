@@ -5,11 +5,11 @@ import java.util.Comparator;
 import java.util.Map;
 
 /**
- * Migawka zawartosci jednego zaladowanego chunka.
+ * Snapshot of the contents of a single loaded chunk.
  *
- * <p>Klasa celowo nie zna typow z Bukkita - typy encji i block-entity trzymane sa jako nazwy
- * (np. {@code "COW"}, {@code "HOPPER"}), dzieki czemu cala logika oceny i kategoryzacji
- * jest testowalna bez uruchamiania serwera.</p>
+ * <p>The class deliberately knows nothing about Bukkit types - entity and block entity types
+ * are kept as plain names (for example {@code "COW"}, {@code "HOPPER"}), which makes the whole
+ * scoring and categorisation logic testable without starting a server.</p>
  */
 public final class ChunkStat {
 
@@ -23,12 +23,12 @@ public final class ChunkStat {
     private final Map<String, Integer> tileTypeCounts;
 
     /**
-     * @param worldName        nazwa swiata, w ktorym lezy chunk
-     * @param chunkX           wspolrzedna X chunka
-     * @param chunkZ           wspolrzedna Z chunka
-     * @param playerCount      liczba graczy w chunku
-     * @param entityTypeCounts liczba encji w rozbiciu na typy
-     * @param tileTypeCounts   liczba block-entity w rozbiciu na typy
+     * @param worldName        name of the world holding the chunk
+     * @param chunkX           chunk X coordinate
+     * @param chunkZ           chunk Z coordinate
+     * @param playerCount      number of players inside the chunk
+     * @param entityTypeCounts entity counts broken down by type
+     * @param tileTypeCounts   block entity counts broken down by type
      */
     public ChunkStat(String worldName, int chunkX, int chunkZ, int playerCount,
                      Map<String, Integer> entityTypeCounts, Map<String, Integer> tileTypeCounts) {
@@ -50,92 +50,93 @@ public final class ChunkStat {
         return total;
     }
 
-    /** @return nazwa swiata */
+    /** @return world name */
     public String worldName() {
         return worldName;
     }
 
-    /** @return wspolrzedna X chunka */
+    /** @return chunk X coordinate */
     public int chunkX() {
         return chunkX;
     }
 
-    /** @return wspolrzedna Z chunka */
+    /** @return chunk Z coordinate */
     public int chunkZ() {
         return chunkZ;
     }
 
-    /** @return wspolrzedna X srodka chunka w blokach (gotowa do wklejenia w /tp) */
+    /** @return block X coordinate of the chunk centre, ready to paste into /tp */
     public int blockX() {
         return chunkX * 16 + 8;
     }
 
-    /** @return wspolrzedna Z srodka chunka w blokach (gotowa do wklejenia w /tp) */
+    /** @return block Z coordinate of the chunk centre, ready to paste into /tp */
     public int blockZ() {
         return chunkZ * 16 + 8;
     }
 
-    /** @return laczna liczba encji w chunku */
+    /** @return total number of entities in the chunk */
     public int entityCount() {
         return entityCount;
     }
 
-    /** @return laczna liczba block-entity (skrzynie, hoppery, piece...) w chunku */
+    /** @return total number of block entities (chests, hoppers, furnaces...) in the chunk */
     public int tileEntityCount() {
         return tileEntityCount;
     }
 
-    /** @return liczba graczy przebywajacych w chunku */
+    /** @return number of players inside the chunk */
     public int playerCount() {
         return playerCount;
     }
 
-    /** @return liczba encji wg typu, mapa niemodyfikowalna */
+    /** @return entity counts by type, as an unmodifiable map */
     public Map<String, Integer> entityTypeCounts() {
         return entityTypeCounts;
     }
 
-    /** @return liczba block-entity wg typu, mapa niemodyfikowalna */
+    /** @return block entity counts by type, as an unmodifiable map */
     public Map<String, Integer> tileTypeCounts() {
         return tileTypeCounts;
     }
 
-    /** @return najliczniejszy typ encji wraz z liczba wystapien lub {@code null}, gdy chunk nie ma encji */
+    /** @return most common entity type with its count, or {@code null} when the chunk has no entities */
     public Map.Entry<String, Integer> dominantEntityType() {
         return dominant(entityTypeCounts);
     }
 
-    /** @return najliczniejszy typ block-entity wraz z liczba wystapien lub {@code null}, gdy chunk nie ma block-entity */
+    /** @return most common block entity type with its count, or {@code null} when there are none */
     public Map.Entry<String, Integer> dominantTileType() {
         return dominant(tileTypeCounts);
     }
 
     private static Map.Entry<String, Integer> dominant(Map<String, Integer> counts) {
         return counts.entrySet().stream()
-                // Przy remisie decyduje nazwa - dzieki temu wynik jest deterministyczny.
+                // Ties break on the name, which keeps the result deterministic.
                 .max(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue)
                         .thenComparing(Map.Entry::getKey, Comparator.reverseOrder()))
                 .orElse(null);
     }
 
-    /** @return czytelny opis lokalizacji, np. {@code world @ 120, 344} */
+    /** @return readable location, for example {@code world @ 120, 344} */
     public String prettyLocation() {
         return worldName + " @ " + blockX() + ", " + blockZ();
     }
 
     @Override
     public String toString() {
-        return "ChunkStat[" + prettyLocation() + ", encje=" + entityCount + ", block-entity=" + tileEntityCount + "]";
+        return "ChunkStat[" + prettyLocation() + ", entities=" + entityCount
+                + ", block entities=" + tileEntityCount + "]";
     }
 
     /**
-     * Wygodny konstruktor dla przypadku bez rozbicia na typy block-entity.
+     * Convenience factory for the case without any block entity breakdown.
      *
-     * @param worldName        nazwa swiata
-     * @param chunkX           wspolrzedna X chunka
-     * @param chunkZ           wspolrzedna Z chunka
-     * @param entityTypeCounts liczba encji wg typu
-     * @return nowa migawka bez block-entity i bez graczy
+     * @param worldName        world name
+     * @param chunkX           chunk X coordinate
+     * @param chunkZ           chunk Z coordinate
+     * @param entityTypeCounts entity counts by type
+     * @return snapshot with no block entities and no players
      */
     public static ChunkStat ofEntities(String worldName, int chunkX, int chunkZ, Map<String, Integer> entityTypeCounts) {
         return new ChunkStat(worldName, chunkX, chunkZ, 0, entityTypeCounts, Collections.emptyMap());

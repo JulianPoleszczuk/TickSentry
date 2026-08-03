@@ -25,14 +25,14 @@ import java.util.function.Consumer;
 import java.util.logging.Level;
 
 /**
- * Trwala historia incydentow w pliku SQLite.
+ * Durable incident history in a SQLite file.
  *
- * <p>Wszystkie operacje na bazie ida przez jeden watek roboczy - zapis na dysk z glownego watku
- * bylby dokladnie tym rodzajem zwiechy, ktory ten plugin ma wykrywac. Wyniki odczytow wracaja
- * na glowny watek przez scheduler, wiec callbacki moga bezpiecznie pisac do graczy.</p>
+ * <p>Every database operation goes through a single worker thread - writing to disk from the main
+ * thread would be exactly the kind of stall this plugin is meant to detect. Read results return to
+ * the main thread via the scheduler, so callbacks may safely message players.</p>
  *
- * <p>Sterownik {@code sqlite-jdbc} nie jest wbudowany w jar - deklaruje go {@code libraries}
- * w {@code plugin.yml}, dzieki czemu Paper pobiera go sam przy pierwszym starcie.</p>
+ * <p>The {@code sqlite-jdbc} driver is not bundled into the jar - it is declared under
+ * {@code libraries} in {@code plugin.yml}, so Paper downloads it on first startup.</p>
  */
 public final class SqliteAlertStore implements AlertStore {
 
@@ -88,18 +88,18 @@ public final class SqliteAlertStore implements AlertStore {
     }
 
     /**
-     * Otwiera (i w razie potrzeby tworzy) baze incydentow.
+     * Opens (and creates if needed) the incident database.
      *
-     * @param plugin   instancja pluginu
-     * @param file     plik bazy
-     * @param keepDays po ilu dniach kasowac stare wpisy (0 = nigdy)
-     * @return gotowy sklad albo {@code null}, gdy bazy nie da sie otworzyc
+     * @param plugin   plugin instance
+     * @param file     database file
+     * @param keepDays after how many days old rows are deleted (0 = never)
+     * @return ready store, or {@code null} when the database cannot be opened
      */
     public static SqliteAlertStore open(Plugin plugin, File file, int keepDays) {
         try {
             File parent = file.getParentFile();
             if (parent != null && !parent.exists() && !parent.mkdirs()) {
-                plugin.getLogger().warning("Nie udalo sie utworzyc katalogu na baze incydentow.");
+                plugin.getLogger().warning("Could not create the directory for the incident database.");
                 return null;
             }
 
@@ -118,7 +118,7 @@ public final class SqliteAlertStore implements AlertStore {
             return store;
         } catch (SQLException | RuntimeException | NoClassDefFoundError ex) {
             plugin.getLogger().log(Level.WARNING,
-                    "Nie udalo sie otworzyc bazy incydentow - historia bedzie tylko w pamieci", ex);
+                    "Could not open the incident database - history will be kept in memory only", ex);
             return null;
         }
     }
@@ -141,7 +141,7 @@ public final class SqliteAlertStore implements AlertStore {
                 statement.setInt(11, incident.manual() ? 1 : 0);
                 statement.executeUpdate();
             } catch (SQLException ex) {
-                plugin.getLogger().log(Level.WARNING, "Nie udalo sie zapisac incydentu", ex);
+                plugin.getLogger().log(Level.WARNING, "Could not save the incident", ex);
             }
         });
     }
@@ -158,7 +158,7 @@ public final class SqliteAlertStore implements AlertStore {
                     }
                 }
             } catch (SQLException ex) {
-                plugin.getLogger().log(Level.WARNING, "Nie udalo sie odczytac historii", ex);
+                plugin.getLogger().log(Level.WARNING, "Could not read the history", ex);
             }
             backToMainThread(callback, result);
         });
@@ -187,7 +187,7 @@ public final class SqliteAlertStore implements AlertStore {
                     stats = new IncidentStats(days, total, byCategory, byHour, worst);
                 }
             } catch (SQLException ex) {
-                plugin.getLogger().log(Level.WARNING, "Nie udalo sie policzyc statystyk", ex);
+                plugin.getLogger().log(Level.WARNING, "Could not compute the statistics", ex);
             }
             backToMainThread(callback, stats);
         });
@@ -212,20 +212,20 @@ public final class SqliteAlertStore implements AlertStore {
         try {
             connection.close();
         } catch (SQLException ex) {
-            plugin.getLogger().log(Level.WARNING, "Blad przy zamykaniu bazy incydentow", ex);
+            plugin.getLogger().log(Level.WARNING, "Error while closing the incident database", ex);
         }
     }
 
-    /** Kasuje wpisy starsze niz zadana liczba dni. */
+    /** Deletes rows older than the given number of days. */
     private void prune(int keepDays) {
         try (PreparedStatement statement = connection.prepareStatement("DELETE FROM incidents WHERE ts < ?")) {
             statement.setLong(1, Instant.now().minus(keepDays, ChronoUnit.DAYS).toEpochMilli());
             int removed = statement.executeUpdate();
             if (removed > 0) {
-                plugin.getLogger().info("Usunieto " + removed + " incydentow starszych niz " + keepDays + " dni.");
+                plugin.getLogger().info("Removed " + removed + " incidents older than " + keepDays + " days.");
             }
         } catch (SQLException ex) {
-            plugin.getLogger().log(Level.WARNING, "Nie udalo sie wyczyscic starych incydentow", ex);
+            plugin.getLogger().log(Level.WARNING, "Could not prune old incidents", ex);
         }
     }
 
@@ -244,7 +244,7 @@ public final class SqliteAlertStore implements AlertStore {
                 rows.getInt("manual") == 1);
     }
 
-    /** Nieznana kategoria (np. po downgradzie pluginu) nie moze wywrocic odczytu historii. */
+    /** An unknown category (say after a plugin downgrade) must not break reading the history. */
     private static LagCategory parseCategory(String name) {
         try {
             return LagCategory.valueOf(name);
@@ -253,7 +253,7 @@ public final class SqliteAlertStore implements AlertStore {
         }
     }
 
-    /** Odsyla wynik na glowny watek, zeby callback mogl bezpiecznie uzywac Bukkit API. */
+    /** Hands the result back to the main thread so the callback may safely use the Bukkit API. */
     private <T> void backToMainThread(Consumer<T> callback, T value) {
         if (!plugin.isEnabled()) {
             return;
