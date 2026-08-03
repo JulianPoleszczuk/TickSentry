@@ -127,15 +127,14 @@ Aliasy: `/ts`, `/ticksentry`.
 
 ## Jak to sprawdzic u siebie
 
-1. Wrzuc jar na testowy serwer Paper, ustaw `webhook-url` i zrob `/lagwatch reload`.
-2. `/lagwatch report discord` - jesli embed pojawi sie na kanale, konfiguracja jest dobra.
-3. Zrob prawdziwy lag: stan w jednym miejscu i wywolaj
-   `/execute run summon cow ~ ~ ~` w petli albo `/summon` przez komendy blokowe - okolo 2000 encji
-   w jednym chunku wystarczy, zeby MSPT przekroczylo 50 ms.
-4. Po `sustained-seconds` sekundach alert powinien wskazac dokladnie ten chunk z kategoria "Farma mobow".
+Pelna instrukcja krok po kroku jest w [TESTOWANIE.md](TESTOWANIE.md) - od zbudowania jara,
+przez wygenerowanie prawdziwego lagu 2000 krowami, po sprawdzenie panelu i alertu na Discordzie.
+Zajmuje okolo 15 minut.
 
-Zeby nie czekac 10 sekund w kolko, na czas testow warto ustawic `sustained-seconds: 3`
-i `scan-cooldown-seconds: 10`.
+W skrocie: ustaw `sustained-seconds: 3`, zrob `/lagwatch reload`, stan w jednym miejscu
+i podwajaj krowy komenda
+`/execute as @e[type=cow,distance=..10] at @s run summon minecraft:cow ~ ~ ~`.
+Alert powinien wskazac dokladnie ten chunk, w ktorym stoisz.
 
 ## Ograniczenia (swiadome, MVP)
 
