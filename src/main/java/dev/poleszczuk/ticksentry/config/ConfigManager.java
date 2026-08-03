@@ -1,9 +1,13 @@
 package dev.poleszczuk.ticksentry.config;
 
+import dev.poleszczuk.ticksentry.monitor.CostWeights;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.Plugin;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -40,6 +44,7 @@ public final class ConfigManager {
     private volatile String dashboardBind;
     private volatile int dashboardPort;
     private volatile String dashboardToken;
+    private volatile CostWeights costWeights;
 
     /**
      * Creates the manager and immediately loads the configuration from disk.
@@ -84,6 +89,31 @@ public final class ConfigManager {
                 .map(name -> name.toLowerCase(Locale.ROOT))
                 .collect(Collectors.toUnmodifiableSet());
         this.topChunksCount = Math.min(25, Math.max(1, cfg.getInt("scan.top-chunks-count", 5)));
+
+        this.costWeights = CostWeights.withOverrides(
+                readWeights(cfg.getConfigurationSection("weights.entities")),
+                readWeights(cfg.getConfigurationSection("weights.block-entities")));
+    }
+
+    /**
+     * Reads a weights section, ignoring anything that is not a number.
+     *
+     * @param section config section, may be {@code null} when absent
+     * @return type name to weight, empty when the section is missing
+     */
+    private Map<String, Double> readWeights(ConfigurationSection section) {
+        Map<String, Double> weights = new HashMap<>();
+        if (section == null) {
+            return weights;
+        }
+        for (String key : section.getKeys(false)) {
+            if (section.isDouble(key) || section.isInt(key)) {
+                weights.put(key, section.getDouble(key));
+            } else {
+                plugin.getLogger().warning("Ignoring weight '" + key + "' - it is not a number.");
+            }
+        }
+        return weights;
     }
 
     /** @return MSPT threshold in milliseconds above which the server counts as overloaded */
@@ -179,6 +209,11 @@ public final class ConfigManager {
     /** @return panel access token; empty means one has to be generated */
     public String dashboardToken() {
         return dashboardToken;
+    }
+
+    /** @return entity and block entity cost weights, with any config overrides applied */
+    public CostWeights costWeights() {
+        return costWeights;
     }
 
     /**

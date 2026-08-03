@@ -51,3 +51,18 @@ dashboard:
   port: 8080
   # Empty = the plugin generates a random token on first start and writes it here.
   token: ""
+
+# How expensive the plugin treats each kind of object, compared to an average mob (= 1.0).
+# You only need this if alerts blame the wrong thing on your server. Anything you do not
+# list here keeps its built-in value, so add only what you want to change.
+#
+# Examples:
+#   weights:
+#     entities:
+#       VILLAGER: 5.0     # villagers hurt more on my server than the default 3.0
+#       ITEM: 0.2         # I already clear dropped items often, stop blaming them
+#     block-entities:
+#       HOPPER: 5.0       # my sorting systems are the usual suspect
+weights:
+  entities: {}
+  block-entities: {}

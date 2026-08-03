@@ -40,61 +40,8 @@ public final class HotspotAnalyzer {
     /** Share of the score coming from block entities that points at redstone. */
     private static final double TILE_DOMINANCE_SHARE = 0.6D;
 
-    private static final double DEFAULT_ENTITY_WEIGHT = 1.0D;
-    private static final double DEFAULT_TILE_WEIGHT = 0.3D;
-
-    private static final Map<String, Double> ENTITY_WEIGHTS = Map.ofEntries(
-            // A player costs far more than a mob: they keep chunks loaded and generate network traffic.
-            Map.entry("PLAYER", 5.0D),
-            Map.entry("ITEM", 0.5D),
-            Map.entry("DROPPED_ITEM", 0.5D),
-            Map.entry("EXPERIENCE_ORB", 0.6D),
-            // Short-lived entities - they appear in bulk during terrain generation and combat, then vanish.
-            Map.entry("FALLING_BLOCK", 0.3D),
-            Map.entry("ARROW", 0.3D),
-            Map.entry("SNOWBALL", 0.2D),
-            Map.entry("ARMOR_STAND", 0.4D),
-            Map.entry("ITEM_FRAME", 0.2D),
-            Map.entry("GLOW_ITEM_FRAME", 0.2D),
-            Map.entry("PAINTING", 0.1D),
-            Map.entry("VILLAGER", 3.0D),
-            Map.entry("WANDERING_TRADER", 2.0D),
-            Map.entry("IRON_GOLEM", 1.5D),
-            Map.entry("ALLAY", 1.5D),
-            Map.entry("PIGLIN", 1.5D),
-            Map.entry("PIGLIN_BRUTE", 1.5D),
-            Map.entry("HOGLIN", 1.5D),
-            Map.entry("ZOMBIFIED_PIGLIN", 1.5D),
-            Map.entry("HOPPER_MINECART", 2.5D),
-            Map.entry("MINECART_HOPPER", 2.5D),
-            Map.entry("CHEST_MINECART", 1.5D),
-            Map.entry("MINECART_CHEST", 1.5D),
-            Map.entry("ZOMBIE", 1.2D),
-            Map.entry("SKELETON", 1.2D),
-            Map.entry("CREEPER", 1.2D),
-            Map.entry("SPIDER", 1.2D),
-            Map.entry("ENDERMAN", 1.2D)
-    );
-
-    private static final Map<String, Double> TILE_WEIGHTS = Map.ofEntries(
-            Map.entry("HOPPER", 3.0D),
-            Map.entry("DROPPER", 1.0D),
-            Map.entry("DISPENSER", 1.0D),
-            Map.entry("SPAWNER", 2.5D),
-            Map.entry("TRIAL_SPAWNER", 2.5D),
-            Map.entry("BEACON", 1.5D),
-            Map.entry("CONDUIT", 1.5D),
-            Map.entry("BREWING_STAND", 0.5D),
-            Map.entry("FURNACE", 0.8D),
-            Map.entry("BLAST_FURNACE", 0.8D),
-            Map.entry("SMOKER", 0.8D),
-            Map.entry("CAMPFIRE", 0.3D),
-            Map.entry("SOUL_CAMPFIRE", 0.3D),
-            Map.entry("CHEST", 0.15D),
-            Map.entry("TRAPPED_CHEST", 0.15D),
-            Map.entry("BARREL", 0.15D),
-            Map.entry("ENDER_CHEST", 0.15D)
-    );
+    /** Weights used when a caller does not supply its own. */
+    private static final CostWeights DEFAULT_WEIGHTS = CostWeights.defaults();
 
     private HotspotAnalyzer() {
     }
@@ -106,9 +53,20 @@ public final class HotspotAnalyzer {
      * @return sum of the weights of all entities
      */
     public static double entityScore(ChunkStat stat) {
+        return entityScore(stat, DEFAULT_WEIGHTS);
+    }
+
+    /**
+     * Computes the weighted cost of entities in a chunk.
+     *
+     * @param stat    chunk snapshot
+     * @param weights cost weights to apply
+     * @return sum of the weights of all entities
+     */
+    public static double entityScore(ChunkStat stat, CostWeights weights) {
         double score = 0.0D;
         for (Map.Entry<String, Integer> entry : stat.entityTypeCounts().entrySet()) {
-            score += entityWeight(entry.getKey()) * entry.getValue();
+            score += weights.entityWeight(entry.getKey()) * entry.getValue();
         }
         return score;
     }
@@ -120,9 +78,20 @@ public final class HotspotAnalyzer {
      * @return sum of the weights of all block entities
      */
     public static double tileScore(ChunkStat stat) {
+        return tileScore(stat, DEFAULT_WEIGHTS);
+    }
+
+    /**
+     * Computes the weighted cost of block entities in a chunk.
+     *
+     * @param stat    chunk snapshot
+     * @param weights cost weights to apply
+     * @return sum of the weights of all block entities
+     */
+    public static double tileScore(ChunkStat stat, CostWeights weights) {
         double score = 0.0D;
         for (Map.Entry<String, Integer> entry : stat.tileTypeCounts().entrySet()) {
-            score += tileWeight(entry.getKey()) * entry.getValue();
+            score += weights.tileWeight(entry.getKey()) * entry.getValue();
         }
         return score;
     }
@@ -134,7 +103,18 @@ public final class HotspotAnalyzer {
      * @return combined entity and block entity score
      */
     public static double score(ChunkStat stat) {
-        return entityScore(stat) + tileScore(stat);
+        return score(stat, DEFAULT_WEIGHTS);
+    }
+
+    /**
+     * Total score of a chunk under the given weights.
+     *
+     * @param stat    chunk snapshot
+     * @param weights cost weights to apply
+     * @return combined entity and block entity score
+     */
+    public static double score(ChunkStat stat, CostWeights weights) {
+        return entityScore(stat, weights) + tileScore(stat, weights);
     }
 
     /**
@@ -145,13 +125,25 @@ public final class HotspotAnalyzer {
      * @return list sorted by score descending, without chunks below the relevance threshold
      */
     public static List<ChunkStat> topChunks(List<ChunkStat> stats, int limit) {
+        return topChunks(stats, limit, DEFAULT_WEIGHTS);
+    }
+
+    /**
+     * Picks the most suspicious chunks using the given weights.
+     *
+     * @param stats   every scanned chunk
+     * @param limit   maximum number of results
+     * @param weights cost weights to apply
+     * @return list sorted by score descending, without chunks below the relevance threshold
+     */
+    public static List<ChunkStat> topChunks(List<ChunkStat> stats, int limit, CostWeights weights) {
         if (limit <= 0) {
             return List.of();
         }
         return stats.stream()
-                .filter(stat -> score(stat) >= MIN_INTERESTING_SCORE)
+                .filter(stat -> score(stat, weights) >= MIN_INTERESTING_SCORE)
                 // Ties break on entity count, then location - the result has to be reproducible.
-                .sorted(Comparator.comparingDouble(HotspotAnalyzer::score).reversed()
+                .sorted(Comparator.comparingDouble((ChunkStat stat) -> score(stat, weights)).reversed()
                         .thenComparing(Comparator.comparingInt(ChunkStat::entityCount).reversed())
                         .thenComparing(ChunkStat::prettyLocation))
                 .limit(limit)
@@ -165,8 +157,19 @@ public final class HotspotAnalyzer {
      * @return matching category, never {@code null}
      */
     public static LagCategory categorize(ChunkStat stat) {
-        double entityScore = entityScore(stat);
-        double tileScore = tileScore(stat);
+        return categorize(stat, DEFAULT_WEIGHTS);
+    }
+
+    /**
+     * Guesses the cause of lag for a single chunk using the given weights.
+     *
+     * @param stat    chunk snapshot
+     * @param weights cost weights to apply
+     * @return matching category, never {@code null}
+     */
+    public static LagCategory categorize(ChunkStat stat, CostWeights weights) {
+        double entityScore = entityScore(stat, weights);
+        double tileScore = tileScore(stat, weights);
         double total = entityScore + tileScore;
         if (total < MIN_INTERESTING_SCORE) {
             return LagCategory.UNKNOWN;
@@ -264,31 +267,18 @@ public final class HotspotAnalyzer {
 
     /**
      * @param entityType entity type name
-     * @return cost weight of that entity type
+     * @return cost weight of that entity type under the built-in weights
      */
     public static double entityWeight(String entityType) {
-        return ENTITY_WEIGHTS.getOrDefault(entityType.toUpperCase(Locale.ROOT), DEFAULT_ENTITY_WEIGHT);
+        return DEFAULT_WEIGHTS.entityWeight(entityType);
     }
 
     /**
      * @param tileType block entity type name
-     * @return cost weight of that block entity type
+     * @return cost weight of that block entity type under the built-in weights
      */
     public static double tileWeight(String tileType) {
-        String type = tileType.toUpperCase(Locale.ROOT);
-        Double exact = TILE_WEIGHTS.get(type);
-        if (exact != null) {
-            return exact;
-        }
-        // Decoration comes in hundreds of variants (signs, banners, heads) and is practically free.
-        if (type.endsWith("SIGN") || type.endsWith("BANNER") || type.endsWith("HEAD")
-                || type.endsWith("SKULL") || type.endsWith("BED") || type.endsWith("POT")) {
-            return 0.05D;
-        }
-        if (type.endsWith("SHULKER_BOX")) {
-            return 0.15D;
-        }
-        return DEFAULT_TILE_WEIGHT;
+        return DEFAULT_WEIGHTS.tileWeight(tileType);
     }
 
     private static boolean isItemLike(String type) {

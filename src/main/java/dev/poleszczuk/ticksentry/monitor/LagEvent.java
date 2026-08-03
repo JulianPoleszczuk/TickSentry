@@ -79,8 +79,34 @@ public final class LagEvent {
     public static LagEvent of(double tps, double averageMspt, double peakMs, int loadedChunks,
                               int totalEntities, List<ChunkStat> topChunks, long scanDurationMs,
                               boolean manual, String sparkSummary, MemoryAnalyzer.Verdict memory) {
+        return of(tps, averageMspt, peakMs, loadedChunks, totalEntities, topChunks, scanDurationMs,
+                manual, sparkSummary, memory, CostWeights.defaults());
+    }
+
+    /**
+     * Assembles an incident using the given cost weights.
+     *
+     * @param tps            one-minute TPS
+     * @param averageMspt    rolling average MSPT
+     * @param peakMs         longest gap between ticks
+     * @param loadedChunks   number of scanned chunks
+     * @param totalEntities  total entity count
+     * @param topChunks      sorted list of suspicious chunks
+     * @param scanDurationMs scan duration
+     * @param manual         whether the scan was manual
+     * @param sparkSummary   spark statistics, or {@code null}
+     * @param memory         what memory looked like, or {@code null} when unknown
+     * @param weights        cost weights used to categorise the chunk
+     * @return incident ready to be reported
+     */
+    public static LagEvent of(double tps, double averageMspt, double peakMs, int loadedChunks,
+                              int totalEntities, List<ChunkStat> topChunks, long scanDurationMs,
+                              boolean manual, String sparkSummary, MemoryAnalyzer.Verdict memory,
+                              CostWeights weights) {
         ChunkStat primary = topChunks.isEmpty() ? null : topChunks.get(0);
-        LagCategory category = primary == null ? LagCategory.UNKNOWN : HotspotAnalyzer.categorize(primary);
+        LagCategory category = primary == null
+                ? LagCategory.UNKNOWN
+                : HotspotAnalyzer.categorize(primary, weights);
 
         // Nothing in the world stood out, but memory did - then memory is the answer.
         if (category == LagCategory.UNKNOWN && memory != null && memory.explainsLag()) {

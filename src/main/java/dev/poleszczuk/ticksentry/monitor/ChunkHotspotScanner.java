@@ -169,12 +169,12 @@ public final class ChunkHotspotScanner {
         }
 
         private void finish() {
-            List<ChunkStat> top = HotspotAnalyzer.topChunks(stats, config.topChunksCount());
+            List<ChunkStat> top = HotspotAnalyzer.topChunks(stats, config.topChunksCount(), config.costWeights());
             long durationMs = (System.nanoTime() - startNanos) / 1_000_000L;
             plugin.getLogger().fine("Scanned " + scannedChunks + " chunks across " + ticksUsed
                     + " ticks (" + durationMs + " ms wall clock).");
             callback.accept(LagEvent.of(tps, mspt, peakMs, scannedChunks, totalEntities, top,
-                    durationMs, manual, spark.summary(), memory.verdict()));
+                    durationMs, manual, spark.summary(), memory.verdict(), config.costWeights()));
         }
     }
 }

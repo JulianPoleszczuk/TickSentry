@@ -105,7 +105,28 @@ dashboard:
   bind: "127.0.0.1"          # only this computer can open it
   port: 8080
   token: ""                  # leave empty, the plugin fills it in
+
+weights:                     # optional, see below
+  entities: {}
+  block-entities: {}
 ```
+
+### Tuning what counts as expensive
+
+The plugin scores each chunk by what is in it. A hopper counts for more than a chest, a villager
+for more than a dropped item. If those guesses do not match your server, change them:
+
+```yaml
+weights:
+  entities:
+    VILLAGER: 5.0   # villagers hurt more here than the default 3.0
+    ITEM: 0.2       # I sweep dropped items often, stop blaming them
+  block-entities:
+    HOPPER: 5.0     # my sorting systems are the usual suspect
+```
+
+Anything you do not list keeps its built-in value, so you only write down what you want changed.
+A value of 1.0 means "as expensive as an average mob".
 
 ### What the numbers mean
 
