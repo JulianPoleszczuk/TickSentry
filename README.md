@@ -43,6 +43,12 @@ because Minecraft itself demands a newer runtime:
 The only case that will not run is a 1.16 server still on Java 8. Bumping such a server to
 Java 11 is recommended by Paper anyway.
 
+Both ends of that range are verified on real servers, not just by compiling: **Paper 1.16.5
+(build 794) on Java 11** and **Paper 1.21.10 on Java 21**. On 1.16.5 the plugin loaded, pulled
+the SQLite driver, served the web panel, answered every command, spotted a chunk holding 454 cows
+as a mob farm, fired a sustained-lag alert and posted the recovery notice. Spark is absent there,
+which the reflective bridge handles silently.
+
 ## Building
 
 ```bash
