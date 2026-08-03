@@ -1,0 +1,19 @@
+name: TickSentry
+version: '${version}'
+main: dev.poleszczuk.ticksentry.TickSentryPlugin
+api-version: '1.20'
+description: Ciagly monitoring wydajnosci serwera z automatycznym wykrywaniem zrodla lagow i alertami na Discord.
+author: Julian Poleszczuk
+softdepend: [spark]
+
+commands:
+  lagwatch:
+    description: Zarzadzanie monitoringiem lagow.
+    usage: /lagwatch <status|report|history|reload>
+    aliases: [ts, ticksentry]
+    permission: ticksentry.admin
+
+permissions:
+  ticksentry.admin:
+    description: Dostep do komend TickSentry.
+    default: op

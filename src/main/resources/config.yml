@@ -1,0 +1,27 @@
+# TickSentry - konfiguracja
+# Po zmianach uzyj /lagwatch reload
+
+monitor:
+  # Sredni czas trwania ticku (MSPT), powyzej ktorego serwer uznajemy za przeciazony.
+  # Zdrowy serwer to zwykle 5-25 ms. 50 ms oznacza, ze serwer nie wyrabia sie z 20 TPS.
+  mspt-threshold-ms: 50
+  # Jak dlugo (w sekundach) prog musi byc przekroczony nieprzerwanie, zanim poleci alert.
+  # Chroni przed alertami na pojedyncze skoki (np. zapis swiata).
+  sustained-seconds: 10
+  # Minimalna przerwa miedzy kolejnymi alertami, zeby nie zaspamowac Discorda.
+  scan-cooldown-seconds: 300
+  # Z ilu ostatnich tickow liczona jest srednia kroczaca.
+  rolling-average-ticks: 100
+
+discord:
+  enabled: true
+  # Ustawienia kanalu -> Integracje -> Webhooki -> Utworz webhook -> Kopiuj URL
+  webhook-url: ""
+  # Opcjonalne ID roli, ktora zostanie oznaczona przy alercie (same cyfry, bez <@&>).
+  mention-role-id: ""
+
+scan:
+  # Swiaty pomijane przy skanowaniu, np. ['world_the_end']
+  ignored-worlds: []
+  # Ile najbardziej podejrzanych chunkow analizowac.
+  top-chunks-count: 5
