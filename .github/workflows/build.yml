@@ -1,0 +1,54 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      # JDK 21 is only needed to build - the produced bytecode targets Java 11.
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Make the Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Build and run the tests
+        run: ./gradlew build --no-daemon
+
+      - name: Check that the jar still targets Java 11
+        run: |
+          unzip -o -q build/libs/TickSentry-*.jar -d /tmp/jarcheck
+          VERSIONS=$(find /tmp/jarcheck -name '*.class' -exec sh -c \
+            'javap -v -cp /tmp/jarcheck "${1#/tmp/jarcheck/}" | grep -m1 "major version"' _ {} \; \
+            | sort -u)
+          echo "$VERSIONS"
+          if [ "$(echo "$VERSIONS" | wc -l)" -ne 1 ] || ! echo "$VERSIONS" | grep -q "major version: 55"; then
+            echo "::error::Expected every class at major version 55 (Java 11)."
+            exit 1
+          fi
+
+      - name: Upload the jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: TickSentry-jar
+          path: build/libs/TickSentry-*.jar
+
+      - name: Upload the test report when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: build/reports/tests/test
