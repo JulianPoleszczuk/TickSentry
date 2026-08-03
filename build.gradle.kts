@@ -27,7 +27,8 @@ java {
 }
 
 tasks.withType<JavaCompile> {
-    options.release = 17
+    // Paper od 1.20.6 wymaga Javy 21 na serwerze, wiec kompilacja do bytecode 21 nic nie ogranicza.
+    options.release = 21
     options.encoding = "UTF-8"
 }
 
