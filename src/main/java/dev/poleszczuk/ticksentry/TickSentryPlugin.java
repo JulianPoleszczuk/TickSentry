@@ -1,6 +1,7 @@
 package dev.poleszczuk.ticksentry;
 
 import dev.poleszczuk.ticksentry.config.ConfigManager;
+import dev.poleszczuk.ticksentry.discord.DiscordWebhookClient;
 import dev.poleszczuk.ticksentry.monitor.ChunkHotspotScanner;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
@@ -15,23 +16,31 @@ public final class TickSentryPlugin extends JavaPlugin {
     private ConfigManager configManager;
     private TickMonitor tickMonitor;
     private ChunkHotspotScanner scanner;
+    private DiscordWebhookClient webhook;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         this.configManager = new ConfigManager(this);
         this.scanner = new ChunkHotspotScanner(this, configManager);
+        this.webhook = new DiscordWebhookClient(this, configManager);
         this.tickMonitor = new TickMonitor(this, configManager, this::handleSustainedLag);
         this.tickMonitor.start();
 
         getLogger().info("TickSentry aktywny - prog " + configManager.msptThresholdMs()
                 + " ms przez " + configManager.sustainedSeconds() + " s.");
+        if (!configManager.discordEnabled()) {
+            getLogger().info("Alerty na Discord sa wylaczone lub brak webhook-url w config.yml.");
+        }
     }
 
     @Override
     public void onDisable() {
         if (tickMonitor != null) {
             tickMonitor.stop();
+        }
+        if (webhook != null) {
+            webhook.shutdown();
         }
     }
 
@@ -46,6 +55,12 @@ public final class TickSentryPlugin extends JavaPlugin {
                     + " (encje: " + stat.entityCount() + ", block-entity: " + stat.tileEntityCount() + ")");
         }
         getLogger().warning("Sugestia: " + event.suggestedAction());
+        webhook.sendLagAlert(event);
+    }
+
+    /** @return klient webhooka Discorda */
+    public DiscordWebhookClient webhook() {
+        return webhook;
     }
 
     /**
