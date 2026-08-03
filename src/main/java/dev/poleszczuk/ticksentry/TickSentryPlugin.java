@@ -1,6 +1,9 @@
 package dev.poleszczuk.ticksentry;
 
 import dev.poleszczuk.ticksentry.config.ConfigManager;
+import dev.poleszczuk.ticksentry.monitor.ChunkHotspotScanner;
+import dev.poleszczuk.ticksentry.monitor.ChunkStat;
+import dev.poleszczuk.ticksentry.monitor.LagEvent;
 import dev.poleszczuk.ticksentry.monitor.TickMonitor;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -11,11 +14,13 @@ public final class TickSentryPlugin extends JavaPlugin {
 
     private ConfigManager configManager;
     private TickMonitor tickMonitor;
+    private ChunkHotspotScanner scanner;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         this.configManager = new ConfigManager(this);
+        this.scanner = new ChunkHotspotScanner(this, configManager);
         this.tickMonitor = new TickMonitor(this, configManager, this::handleSustainedLag);
         this.tickMonitor.start();
 
@@ -30,11 +35,27 @@ public final class TickSentryPlugin extends JavaPlugin {
         }
     }
 
-    /** Reakcja na trwale przekroczenie progu MSPT - na razie wpis do logu serwera. */
+    /** Reakcja na trwale przekroczenie progu MSPT - skanuje chunki i raportuje incydent. */
     private void handleSustainedLag() {
+        LagEvent event = runScan(false);
         getLogger().warning(String.format(
-                "Wykryto trwaly lag: MSPT %.1f ms, TPS %.2f, najwiekszy skok %.0f ms.",
-                tickMonitor.averageMspt(), tickMonitor.tps(), tickMonitor.peakIntervalMs()));
+                "Wykryto trwaly lag: MSPT %.1f ms, TPS %.2f, najwiekszy skok %.0f ms. Przyczyna: %s.",
+                event.averageMspt(), event.tps(), event.peakMs(), event.category().title()));
+        for (ChunkStat stat : event.topChunks()) {
+            getLogger().warning(" - " + stat.prettyLocation()
+                    + " (encje: " + stat.entityCount() + ", block-entity: " + stat.tileEntityCount() + ")");
+        }
+        getLogger().warning("Sugestia: " + event.suggestedAction());
+    }
+
+    /**
+     * Wykonuje skan chunkow z aktualnymi odczytami monitora.
+     *
+     * @param manual czy skan zostal wywolany recznie komenda
+     * @return zebrany incydent
+     */
+    public LagEvent runScan(boolean manual) {
+        return scanner.scan(tickMonitor.tps(), tickMonitor.averageMspt(), tickMonitor.peakIntervalMs(), manual);
     }
 
     /** @return manager konfiguracji pluginu */
