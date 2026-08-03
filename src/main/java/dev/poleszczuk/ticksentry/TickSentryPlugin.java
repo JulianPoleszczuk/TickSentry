@@ -1,11 +1,14 @@
 package dev.poleszczuk.ticksentry;
 
+import dev.poleszczuk.ticksentry.commands.LagWatchCommand;
 import dev.poleszczuk.ticksentry.config.ConfigManager;
 import dev.poleszczuk.ticksentry.discord.DiscordWebhookClient;
 import dev.poleszczuk.ticksentry.monitor.ChunkHotspotScanner;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
 import dev.poleszczuk.ticksentry.monitor.TickMonitor;
+import dev.poleszczuk.ticksentry.storage.AlertHistory;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -17,15 +20,27 @@ public final class TickSentryPlugin extends JavaPlugin {
     private TickMonitor tickMonitor;
     private ChunkHotspotScanner scanner;
     private DiscordWebhookClient webhook;
+    private AlertHistory alertHistory;
+
+    /** Ile ostatnich incydentow pamieta plugin do {@code /lagwatch history}. */
+    private static final int HISTORY_CAPACITY = 25;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         this.configManager = new ConfigManager(this);
+        this.alertHistory = new AlertHistory(HISTORY_CAPACITY);
         this.scanner = new ChunkHotspotScanner(this, configManager);
         this.webhook = new DiscordWebhookClient(this, configManager);
         this.tickMonitor = new TickMonitor(this, configManager, this::handleSustainedLag);
         this.tickMonitor.start();
+
+        PluginCommand command = getCommand("lagwatch");
+        if (command != null) {
+            LagWatchCommand handler = new LagWatchCommand(this);
+            command.setExecutor(handler);
+            command.setTabCompleter(handler);
+        }
 
         getLogger().info("TickSentry aktywny - prog " + configManager.msptThresholdMs()
                 + " ms przez " + configManager.sustainedSeconds() + " s.");
@@ -47,6 +62,7 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** Reakcja na trwale przekroczenie progu MSPT - skanuje chunki i raportuje incydent. */
     private void handleSustainedLag() {
         LagEvent event = runScan(false);
+        alertHistory.record(event);
         getLogger().warning(String.format(
                 "Wykryto trwaly lag: MSPT %.1f ms, TPS %.2f, najwiekszy skok %.0f ms. Przyczyna: %s.",
                 event.averageMspt(), event.tps(), event.peakMs(), event.category().title()));
@@ -81,5 +97,10 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** @return dzialajacy monitor tickow */
     public TickMonitor tickMonitor() {
         return tickMonitor;
+    }
+
+    /** @return historia incydentow z biezacej sesji serwera */
+    public AlertHistory alertHistory() {
+        return alertHistory;
     }
 }
