@@ -17,6 +17,8 @@ profilera. Alert przychodzi sam, z gotowa komenda do wklejenia.
 - Po ustaniu lagu wysyla osobna, zielona wiadomosc "serwer wrocil do normy" z czasem trwania incydentu.
 - Zapisuje incydenty do SQLite, wiec historia przezywa restart, a `/lagwatch stats` pokazuje,
   o ktorej godzinie i przez co serwer laguje najczesciej.
+- Ma wbudowany **panel webowy** z wykresem czasu ticku i lista incydentow - bez hostingu,
+  bez zadnej uslugi zewnetrznej, wszystko dziala na maszynie z serwerem gry.
 - Jesli na serwerze jest **spark**, dokleja jego statystyki (srednia i 95. percentyl czasu ticku).
 - Jesli jest **PlaceholderAPI**, wystawia `%ticksentry_tps%`, `%ticksentry_mspt%` i kilka innych.
 
@@ -55,7 +57,44 @@ scan:
 storage:
   enabled: true              # false = historia tylko w pamieci, znika po restarcie
   keep-days: 30              # po ilu dniach kasowac stare wpisy (0 = trzymaj wszystko)
+dashboard:
+  enabled: false             # panel webowy w przegladarce
+  bind: "127.0.0.1"          # tylko z tego komputera; 0.0.0.0 wystawia na siec
+  port: 8080
+  token: ""                  # puste = plugin wygeneruje losowy i tu zapisze
 ```
+
+## Panel webowy
+
+Ustaw `dashboard.enabled: true` i zrestartuj serwer. W konsoli pojawi sie gotowy adres:
+
+```
+[TickSentry] Panel webowy: http://127.0.0.1:8080/?token=a15e51d7...
+```
+
+Wklej go do przegladarki. Panel pokazuje TPS, czas ticku, najdluzsza zwieche, liczbe graczy,
+wykres czasu ticku z ostatniej godziny (z zaznaczonym progiem alarmowym) i tabele ostatnich
+incydentow. Odswieza sie sam co 2 sekundy.
+
+**Niczego nie trzeba hostowac.** Panel to serwer HTTP wbudowany w plugin (`HttpServer` z JDK),
+dzialajacy na tej samej maszynie co serwer gry. Nie ma centralnej uslugi, konta ani kosztow -
+kazdy, kto zainstaluje plugin, ma swoj wlasny panel.
+
+### Bezpieczenstwo
+
+Kazde zadanie musi podac token - w adresie (`?token=...`) albo w naglowku `X-Auth-Token`.
+Token jest generowany losowo przy pierwszym starcie i zapisywany w `config.yml`.
+
+**Polaczenie idzie czystym HTTP, bez szyfrowania.** Dlatego domyslnie panel nasluchuje tylko na
+`127.0.0.1`, czyli jest dostepny wylacznie z komputera, na ktorym stoi serwer. Zeby wejsc z
+innego urzadzenia, sa dwie bezpieczne drogi:
+
+1. **Tunel SSH** (najprostsza): `ssh -L 8080:127.0.0.1:8080 user@twoj-serwer`, potem wejdz na
+   `http://127.0.0.1:8080` u siebie.
+2. **Reverse proxy z HTTPS** (nginx, Caddy) przed panelem.
+
+Ustawienie `bind: "0.0.0.0"` wystawia panel na siec bez szyfrowania - token poleci wtedy
+otwartym tekstem i kazdy po drodze moze go przechwycic. Plugin ostrzega o tym w konsoli.
 
 Webhook zdobywasz tak: ustawienia kanalu na Discordzie -> Integracje -> Webhooki -> Utworz webhook -> kopiuj URL.
 
@@ -126,6 +165,11 @@ com/../ticksentry
 ├── commands/LagWatchCommand
 ├── config/ConfigManager
 ├── placeholders/TickSentryExpansion  opcjonalne placeholdery PlaceholderAPI
+├── util/Json                niezbedne minimum do recznego skladania JSON-a
+├── web/
+│   ├── DashboardServer      HttpServer z JDK, token, trzy endpointy
+│   ├── LiveSnapshot         migawka stanu skladana na glownym watku
+│   └── MsptHistory          bufor kolowy probek do wykresu
 └── storage/
     ├── AlertStore           interfejs skladu incydentow
     ├── SqliteAlertStore     zapis na dysk, cale I/O na osobnym watku
@@ -138,8 +182,8 @@ Sterownik SQLite nie jest wbudowany w jar - deklaruje go `libraries` w `plugin.y
 wiec Paper pobiera go sam przy pierwszym starcie. Jar zostaje przez to lekki (~60 KB)
 i nie ma konfliktow wersji z innymi pluginami.
 
-Testy jednostkowe (`./gradlew test`) pokrywaja logike oceny chunkow i budowanie JSON-a embeda -
-20 testow, bez mockowania Bukkita.
+Testy jednostkowe (`./gradlew test`) pokrywaja logike oceny chunkow, budowanie JSON-a,
+statystyki i bufor probek - 35 testow, bez mockowania Bukkita.
 
 ## Skad wziete progi
 

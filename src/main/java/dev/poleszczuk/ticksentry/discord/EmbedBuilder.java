@@ -1,5 +1,7 @@
 package dev.poleszczuk.ticksentry.discord;
 
+import dev.poleszczuk.ticksentry.util.Json;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -135,30 +137,7 @@ public final class EmbedBuilder {
      * @return tekst bezpieczny do wstawienia miedzy cudzyslowy
      */
     public static String escape(String text) {
-        if (text == null) {
-            return "";
-        }
-        StringBuilder out = new StringBuilder(text.length() + 16);
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            switch (c) {
-                case '"' -> out.append("\\\"");
-                case '\\' -> out.append("\\\\");
-                case '\n' -> out.append("\\n");
-                case '\r' -> out.append("\\r");
-                case '\t' -> out.append("\\t");
-                case '\b' -> out.append("\\b");
-                case '\f' -> out.append("\\f");
-                default -> {
-                    if (c < 0x20) {
-                        out.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        out.append(c);
-                    }
-                }
-            }
-        }
-        return out.toString();
+        return Json.escape(text);
     }
 
     private static String truncate(String text, int max) {

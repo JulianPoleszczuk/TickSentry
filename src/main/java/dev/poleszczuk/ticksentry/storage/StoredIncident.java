@@ -3,6 +3,7 @@ package dev.poleszczuk.ticksentry.storage;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
 import dev.poleszczuk.ticksentry.monitor.LagCategory;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
+import dev.poleszczuk.ticksentry.util.Json;
 
 import java.time.Instant;
 import java.util.Map;
@@ -65,5 +66,41 @@ public record StoredIncident(
     /** @return czytelny opis lokalizacji albo informacja o jej braku */
     public String prettyLocation() {
         return world == null ? "brak konkretnego miejsca" : world + " @ " + blockX + ", " + blockZ;
+    }
+
+    /**
+     * Serializuje incydent na potrzeby panelu webowego.
+     *
+     * @return obiekt JSON z polami czytanymi przez dashboard.html
+     */
+    public String toJson() {
+        return "{"
+                + Json.field("at", timestamp.toEpochMilli()) + ","
+                + Json.field("mspt", mspt) + ","
+                + Json.field("tps", tps) + ","
+                + Json.field("category", category.title()) + ","
+                + Json.field("world", world) + ","
+                + Json.field("x", blockX) + ","
+                + Json.field("z", blockZ) + ","
+                + Json.field("entities", entities) + ","
+                + Json.field("manual", manual)
+                + "}";
+    }
+
+    /**
+     * Sklada tablice JSON z listy incydentow.
+     *
+     * @param incidents lista do zserializowania
+     * @return tablica JSON gotowa dla dashboardu
+     */
+    public static String toJsonArray(java.util.List<StoredIncident> incidents) {
+        StringBuilder json = new StringBuilder("[");
+        for (int i = 0; i < incidents.size(); i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            json.append(incidents.get(i).toJson());
+        }
+        return json.append(']').toString();
     }
 }

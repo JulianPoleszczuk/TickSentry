@@ -13,6 +13,10 @@ import dev.poleszczuk.ticksentry.placeholders.TickSentryExpansion;
 import dev.poleszczuk.ticksentry.storage.AlertStore;
 import dev.poleszczuk.ticksentry.storage.MemoryAlertStore;
 import dev.poleszczuk.ticksentry.storage.SqliteAlertStore;
+import dev.poleszczuk.ticksentry.storage.StoredIncident;
+import dev.poleszczuk.ticksentry.web.DashboardServer;
+import dev.poleszczuk.ticksentry.web.LiveSnapshot;
+import dev.poleszczuk.ticksentry.web.MsptHistory;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -30,12 +34,25 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** Jak czesto (w tickach) odswiezany jest licznik incydentow na potrzeby placeholderow. */
     private static final long COUNTER_REFRESH_TICKS = 20L * 60L;
 
+    /** Co ile tickow zbierana jest probka do wykresu na dashboardzie (5 sekund). */
+    private static final long SAMPLE_TICKS = 20L * 5L;
+
+    /** Ile probek trzyma wykres - 720 probek co 5 s daje godzine historii. */
+    private static final int SAMPLE_CAPACITY = 720;
+
+    /** Co ile tickow odswiezana jest lista incydentow w panelu (30 sekund). */
+    private static final long DASHBOARD_INCIDENTS_TICKS = 20L * 30L;
+
+    /** Ile incydentow pokazuje panel webowy. */
+    private static final int DASHBOARD_INCIDENTS_SHOWN = 20;
+
     private ConfigManager configManager;
     private TickMonitor tickMonitor;
     private ChunkHotspotScanner scanner;
     private DiscordWebhookClient webhook;
     private AlertStore alertStore;
     private SparkBridge sparkBridge;
+    private DashboardServer dashboard;
 
     private volatile int incidentsLast24h;
     private volatile LagCategory lastCategory;
@@ -59,7 +76,9 @@ public final class TickSentryPlugin extends JavaPlugin {
         }
 
         registerPlaceholders();
-        getServer().getScheduler().runTaskTimer(this, this::refreshCounters, COUNTER_REFRESH_TICKS, COUNTER_REFRESH_TICKS);
+        startDashboard();
+        // Pierwszy odczyt po sekundzie, zeby panel i placeholdery nie pokazywaly zera przez cala minute.
+        getServer().getScheduler().runTaskTimer(this, this::refreshCounters, 20L, COUNTER_REFRESH_TICKS);
 
         getLogger().info("TickSentry aktywny - prog " + configManager.msptThresholdMs()
                 + " ms przez " + configManager.sustainedSeconds() + " s. Historia: " + alertStore.describe() + ".");
@@ -75,6 +94,9 @@ public final class TickSentryPlugin extends JavaPlugin {
         }
         if (webhook != null) {
             webhook.shutdown();
+        }
+        if (dashboard != null) {
+            dashboard.stop();
         }
         if (alertStore != null) {
             alertStore.close();
@@ -110,6 +132,61 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** Odswieza licznik incydentow z ostatniej doby - placeholdery nie moga pytac bazy same. */
     private void refreshCounters() {
         alertStore.stats(1, stats -> this.incidentsLast24h = stats.total());
+    }
+
+    /**
+     * Uruchamia panel webowy, jesli jest wlaczony w konfiguracji.
+     * Token generujemy przy pierwszym starcie i zapisujemy, zeby adres panelu byl staly.
+     */
+    private void startDashboard() {
+        if (!configManager.dashboardEnabled()) {
+            return;
+        }
+        String token = configManager.dashboardToken();
+        if (token.isEmpty()) {
+            token = DashboardServer.generateToken();
+            configManager.saveDashboardToken(token);
+            getLogger().info("Wygenerowano token panelu i zapisano go w config.yml.");
+        }
+
+        MsptHistory history = new MsptHistory(SAMPLE_CAPACITY);
+        DashboardServer server = new DashboardServer(this, token, history);
+        if (!server.start(configManager.dashboardBind(), configManager.dashboardPort())) {
+            return;
+        }
+        this.dashboard = server;
+
+        if (!"127.0.0.1".equals(configManager.dashboardBind()) && !"localhost".equals(configManager.dashboardBind())) {
+            getLogger().warning("Panel nasluchuje na " + configManager.dashboardBind()
+                    + " bez szyfrowania - token leci otwartym tekstem. Rozwaz tunel SSH albo proxy z HTTPS.");
+        }
+
+        // Migawki i probki zbiera glowny watek; handlery HTTP tylko je odczytuja.
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            LiveSnapshot snapshot = collectSnapshot();
+            history.add(snapshot.generatedAt(), snapshot.mspt(), snapshot.tps());
+            server.update(snapshot);
+        }, SAMPLE_TICKS, SAMPLE_TICKS);
+
+        getServer().getScheduler().runTaskTimer(this, () -> alertStore.recent(DASHBOARD_INCIDENTS_SHOWN,
+                        incidents -> server.updateIncidents(StoredIncident.toJsonArray(incidents))),
+                20L, DASHBOARD_INCIDENTS_TICKS);
+    }
+
+    /** Sklada migawke stanu serwera - wolno to robic wylacznie na glownym watku. */
+    private LiveSnapshot collectSnapshot() {
+        return new LiveSnapshot(
+                tickMonitor.tps(),
+                tickMonitor.averageMspt(),
+                tickMonitor.peakIntervalMs(),
+                configManager.msptThresholdMs(),
+                getServer().getOnlinePlayers().size(),
+                tickMonitor.isRunning(),
+                tickMonitor.isInIncident(),
+                incidentsLast24h,
+                lastCategory == null ? null : lastCategory.title(),
+                sparkBridge.summary(),
+                System.currentTimeMillis());
     }
 
     /** Reakcja na trwale przekroczenie progu MSPT - zleca skan chunkow. */

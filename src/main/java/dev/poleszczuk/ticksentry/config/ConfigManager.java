@@ -35,6 +35,11 @@ public final class ConfigManager {
     private volatile boolean storageEnabled;
     private volatile int storageKeepDays;
 
+    private volatile boolean dashboardEnabled;
+    private volatile String dashboardBind;
+    private volatile int dashboardPort;
+    private volatile String dashboardToken;
+
     /**
      * Tworzy managera i od razu wczytuje konfiguracje z dysku.
      *
@@ -62,6 +67,11 @@ public final class ConfigManager {
 
         this.storageEnabled = cfg.getBoolean("storage.enabled", true);
         this.storageKeepDays = Math.max(0, cfg.getInt("storage.keep-days", 30));
+
+        this.dashboardEnabled = cfg.getBoolean("dashboard.enabled", false);
+        this.dashboardBind = cfg.getString("dashboard.bind", "127.0.0.1").trim();
+        this.dashboardPort = Math.min(65535, Math.max(1, cfg.getInt("dashboard.port", 8080)));
+        this.dashboardToken = cfg.getString("dashboard.token", "").trim();
 
         this.discordEnabled = cfg.getBoolean("discord.enabled", true);
         this.webhookUrl = cfg.getString("discord.webhook-url", "").trim();
@@ -142,5 +152,36 @@ public final class ConfigManager {
     /** @return po ilu dniach kasowac stare incydenty (0 = nigdy) */
     public int storageKeepDays() {
         return storageKeepDays;
+    }
+
+    /** @return czy panel webowy ma zostac uruchomiony */
+    public boolean dashboardEnabled() {
+        return dashboardEnabled;
+    }
+
+    /** @return adres nasluchu panelu (domyslnie tylko lokalny) */
+    public String dashboardBind() {
+        return dashboardBind;
+    }
+
+    /** @return port panelu webowego */
+    public int dashboardPort() {
+        return dashboardPort;
+    }
+
+    /** @return token dostepu do panelu; pusty oznacza, ze trzeba go wygenerowac */
+    public String dashboardToken() {
+        return dashboardToken;
+    }
+
+    /**
+     * Zapisuje wygenerowany token panelu do {@code config.yml}, zeby przetrwal restart.
+     *
+     * @param token nowy token dostepu
+     */
+    public void saveDashboardToken(String token) {
+        this.dashboardToken = token;
+        plugin.getConfig().set("dashboard.token", token);
+        plugin.saveConfig();
     }
 }

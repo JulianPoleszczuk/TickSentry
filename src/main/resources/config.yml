@@ -24,6 +24,19 @@ storage:
   # Po ilu dniach kasowac stare wpisy (0 = trzymaj wszystko).
   keep-days: 30
 
+dashboard:
+  # Panel webowy z wykresem i lista incydentow, dostepny w przegladarce.
+  # Dziala na tej samej maszynie co serwer - nic nie trzeba nigdzie hostowac.
+  enabled: false
+  # UWAGA: polaczenie idzie czystym HTTP. Adres 127.0.0.1 oznacza dostep tylko z tego
+  # komputera - najbezpieczniejsze ustawienie. Zeby wejsc z innego urzadzenia, uzyj
+  # tunelu SSH albo postaw przed panelem reverse proxy z HTTPS. Wpisanie 0.0.0.0
+  # wystawia panel na siec bez szyfrowania, razem z tokenem.
+  bind: "127.0.0.1"
+  port: 8080
+  # Puste = plugin wygeneruje losowy token przy pierwszym starcie i zapisze go tutaj.
+  token: ""
+
 discord:
   enabled: true
   # Ustawienia kanalu -> Integracje -> Webhooki -> Utworz webhook -> Kopiuj URL

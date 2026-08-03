@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TickSentry</title>
+<style>
+  :root {
+    --bg: #14161a; --card: #1c1f26; --line: #2a2f3a;
+    --text: #e6e9ef; --muted: #8b93a3;
+    --ok: #3ddc84; --warn: #f5a623; --bad: #e74c3c; --accent: #4aa8ff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f5f6f8; --card: #ffffff; --line: #e2e5ea;
+      --text: #1a1d23; --muted: #666e7d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .badge.ok { background: rgba(61,220,132,.15); color: var(--ok); }
+  .badge.bad { background: rgba(231,76,60,.15); color: var(--bad); }
+  .badge.off { background: rgba(139,147,163,.15); color: var(--muted); }
+  .stamp { color: var(--muted); font-size: 13px; margin-left: auto; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .card .value { font-size: 26px; font-weight: 650; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .card .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  section h2 { font-size: 14px; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  canvas { width: 100%; height: 200px; display: block; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px;
+       text-transform: uppercase; letter-spacing: .04em; padding-bottom: 8px; }
+  td { padding: 8px 0; border-top: 1px solid var(--line); vertical-align: top; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scroll { overflow-x: auto; }
+  .empty { color: var(--muted); padding: 8px 0; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 24px; }
+  .err { background: rgba(231,76,60,.12); color: var(--bad); padding: 10px 14px;
+         border-radius: 8px; margin-bottom: 16px; display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>TickSentry</h1>
+    <span id="state" class="badge off">laczenie...</span>
+    <span id="stamp" class="stamp"></span>
+  </header>
+
+  <div id="error" class="err"></div>
+
+  <div class="grid">
+    <div class="card"><div class="label">TPS</div><div class="value" id="tps">-</div><div class="sub">z 20</div></div>
+    <div class="card"><div class="label">Czas ticku</div><div class="value" id="mspt">-</div><div class="sub" id="threshold"></div></div>
+    <div class="card"><div class="label">Najdluzsza zwiecha</div><div class="value" id="peak">-</div><div class="sub">w oknie pomiarowym</div></div>
+    <div class="card"><div class="label">Gracze</div><div class="value" id="players">-</div><div class="sub">online</div></div>
+    <div class="card"><div class="label">Incydenty</div><div class="value" id="inc24">-</div><div class="sub">ostatnia doba</div></div>
+  </div>
+
+  <section>
+    <h2>Czas ticku (ostatnia godzina)</h2>
+    <canvas id="chart"></canvas>
+  </section>
+
+  <section>
+    <h2>Ostatnie incydenty</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Kiedy</th><th>Czas ticku</th><th>Przyczyna</th><th>Gdzie</th></tr></thead>
+        <tbody id="incidents"><tr><td colspan="4" class="empty">Wczytywanie...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer id="spark"></footer>
+</div>
+
+<script>
+const token = new URLSearchParams(location.search).get("token") || "";
+const $ = id => document.getElementById(id);
+
+function api(path) {
+  return fetch(path + "?token=" + encodeURIComponent(token), { cache: "no-store" })
+    .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); });
+}
+
+function showError(message) {
+  const box = $("error");
+  box.textContent = message;
+  box.style.display = message ? "block" : "none";
+}
+
+function paintState(live) {
+  const badge = $("state");
+  if (!live.monitoring) { badge.className = "badge off"; badge.textContent = "monitoring wylaczony"; }
+  else if (live.inIncident) { badge.className = "badge bad"; badge.textContent = "trwa lag"; }
+  else { badge.className = "badge ok"; badge.textContent = "serwer zdrowy"; }
+}
+
+function drawChart(points, threshold) {
+  const canvas = $("chart");
+  const ratio = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth, height = 200;
+  canvas.width = width * ratio; canvas.height = height * ratio;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(ratio, ratio);
+  ctx.clearRect(0, 0, width, height);
+
+  const css = getComputedStyle(document.documentElement);
+  const lineColor = css.getPropertyValue("--line").trim();
+  const muted = css.getPropertyValue("--muted").trim();
+
+  if (!points.length) {
+    ctx.fillStyle = muted; ctx.font = "13px system-ui";
+    ctx.fillText("Zbieranie probek...", 12, height / 2);
+    return;
+  }
+
+  const values = points.map(p => p.mspt);
+  const max = Math.max(threshold * 1.3, ...values, 10);
+  const x = i => (i / Math.max(1, points.length - 1)) * (width - 8) + 4;
+  const y = v => height - 18 - (v / max) * (height - 30);
+
+  // Siatka i podpisy osi. Zera nie podpisujemy - to dolna krawedz, a etykieta nachodzilaby na wykres.
+  ctx.strokeStyle = lineColor; ctx.fillStyle = muted;
+  ctx.font = "11px system-ui"; ctx.lineWidth = 1;
+  for (let i = 1; i <= 2; i++) {
+    const value = (max / 2) * i, py = y(value);
+    ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(width, py); ctx.stroke();
+    ctx.fillText(value.toFixed(0) + " ms", 4, py - 3);
+  }
+
+  // Linia progu alarmowego.
+  ctx.strokeStyle = css.getPropertyValue("--warn").trim();
+  ctx.setLineDash([4, 4]); ctx.beginPath();
+  ctx.moveTo(0, y(threshold)); ctx.lineTo(width, y(threshold)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Wykres czasu ticku.
+  ctx.strokeStyle = css.getPropertyValue("--accent").trim();
+  ctx.lineWidth = 2; ctx.beginPath();
+  points.forEach((p, i) => i ? ctx.lineTo(x(i), y(p.mspt)) : ctx.moveTo(x(i), y(p.mspt)));
+  ctx.stroke();
+}
+
+function refreshLive() {
+  return api("/api/live").then(data => {
+    const live = data.live;
+    $("tps").textContent = live.tps.toFixed(1);
+    $("mspt").textContent = live.mspt.toFixed(1) + " ms";
+    $("threshold").textContent = "prog " + live.threshold.toFixed(0) + " ms";
+    $("peak").textContent = live.peakMs.toFixed(0) + " ms";
+    $("players").textContent = live.players;
+    $("inc24").textContent = live.incidents24h;
+    $("stamp").textContent = "aktualizacja " + new Date(live.generatedAt).toLocaleTimeString("pl-PL");
+    $("spark").textContent = live.spark || "";
+    paintState(live);
+    drawChart(data.chart, live.threshold);
+    showError("");
+  }).catch(e => showError("Brak polaczenia z serwerem (" + e.message + "). Sprawdz, czy token w adresie jest poprawny."));
+}
+
+function refreshIncidents() {
+  return api("/api/incidents").then(list => {
+    const body = $("incidents");
+    if (!list.length) {
+      body.innerHTML = '<tr><td colspan="4" class="empty">Nie zapisano jeszcze zadnego incydentu.</td></tr>';
+      return;
+    }
+    body.innerHTML = list.map(i => {
+      const when = new Date(i.at).toLocaleString("pl-PL", { day: "2-digit", month: "2-digit",
+        hour: "2-digit", minute: "2-digit" });
+      const where = i.world ? i.world + " @ " + i.x + ", " + i.z : "-";
+      const manual = i.manual ? " (recznie)" : "";
+      return "<tr><td class='num'>" + when + manual + "</td><td class='num'>" + i.mspt.toFixed(0)
+        + " ms</td><td>" + i.category + "</td><td>" + where + "</td></tr>";
+    }).join("");
+  }).catch(() => {});
+}
+
+refreshLive(); refreshIncidents();
+setInterval(refreshLive, 2000);
+setInterval(refreshIncidents, 30000);
+window.addEventListener("resize", () => refreshLive());
+</script>
+</body>
+</html>
