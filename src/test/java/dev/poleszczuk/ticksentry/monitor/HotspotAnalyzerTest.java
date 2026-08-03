@@ -42,7 +42,7 @@ class HotspotAnalyzerTest {
     void topChunksAreSortedAndLimited() {
         ChunkStat small = entities(1, 1, Map.of("COW", 40));
         ChunkStat big = entities(2, 2, Map.of("VILLAGER", 60));
-        ChunkStat medium = entities(3, 3, Map.of("ZOMBIE", 50));
+        ChunkStat medium = entities(3, 3, Map.of("ZOMBIE", 100));
 
         List<ChunkStat> top = HotspotAnalyzer.topChunks(List.of(small, big, medium), 2);
 
@@ -91,7 +91,7 @@ class HotspotAnalyzerTest {
     @Test
     @DisplayName("Mieszanka roznych mobow to ogolne przeciazenie encjami")
     void detectsGenericOverload() {
-        ChunkStat mixed = entities(0, 0, Map.of("ZOMBIE", 20, "SKELETON", 20, "CREEPER", 20));
+        ChunkStat mixed = entities(0, 0, Map.of("ZOMBIE", 30, "SKELETON", 30, "CREEPER", 30));
         assertEquals(LagCategory.ENTITY_OVERLOAD, HotspotAnalyzer.categorize(mixed));
     }
 
@@ -99,6 +99,15 @@ class HotspotAnalyzerTest {
     @DisplayName("Spokojny chunk nie dostaje zadnej kategorii")
     void quietChunkIsUnknown() {
         assertEquals(LagCategory.UNKNOWN, HotspotAnalyzer.categorize(entities(0, 0, Map.of("COW", 10))));
+    }
+
+    @Test
+    @DisplayName("Encje krotkotrwale z generowania terenu nie udaja farmy")
+    void fallingBlocksAreNotAFarm() {
+        // Regresja z testu na zywym serwerze: 43 spadajace bloki byly klasyfikowane jako farma mobow.
+        ChunkStat generating = entities(0, 0, Map.of("FALLING_BLOCK", 43));
+        assertEquals(LagCategory.UNKNOWN, HotspotAnalyzer.categorize(generating));
+        assertTrue(HotspotAnalyzer.topChunks(List.of(generating), 5).isEmpty());
     }
 
     @Test

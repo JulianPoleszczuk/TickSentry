@@ -62,9 +62,13 @@ public final class TickSentryPlugin extends JavaPlugin {
         }
     }
 
-    /** Reakcja na trwale przekroczenie progu MSPT - skanuje chunki i raportuje incydent. */
+    /** Reakcja na trwale przekroczenie progu MSPT - zleca skan chunkow. */
     private void handleSustainedLag() {
-        LagEvent event = runScan(false);
+        runScan(false, this::reportIncident);
+    }
+
+    /** Wypisuje incydent do logu serwera i wysyla go na Discorda. */
+    private void reportIncident(LagEvent event) {
         alertHistory.record(event);
         getLogger().warning(String.format(
                 "Wykryto trwaly lag: MSPT %.1f ms, TPS %.2f, najwiekszy skok %.0f ms. Przyczyna: %s.",
@@ -83,13 +87,17 @@ public final class TickSentryPlugin extends JavaPlugin {
     }
 
     /**
-     * Wykonuje skan chunkow z aktualnymi odczytami monitora.
+     * Zleca skan chunkow z aktualnymi odczytami monitora.
      *
-     * @param manual czy skan zostal wywolany recznie komenda
-     * @return zebrany incydent
+     * <p>Skan jest rozlozony na kolejne ticki, wiec wynik przychodzi callbackiem, a nie zwrotka.</p>
+     *
+     * @param manual   czy skan zostal wywolany recznie komenda
+     * @param callback odbiorca gotowego incydentu (glowny watek)
+     * @return {@code false}, jesli inny skan juz trwa i zlecenie zostalo pominiete
      */
-    public LagEvent runScan(boolean manual) {
-        return scanner.scan(tickMonitor.tps(), tickMonitor.averageMspt(), tickMonitor.peakIntervalMs(), manual);
+    public boolean runScan(boolean manual, java.util.function.Consumer<LagEvent> callback) {
+        return scanner.startScan(tickMonitor.tps(), tickMonitor.averageMspt(),
+                tickMonitor.peakIntervalMs(), manual, callback);
     }
 
     /** @return manager konfiguracji pluginu */

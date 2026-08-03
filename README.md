@@ -10,6 +10,7 @@ profilera. Alert przychodzi sam, z gotowa komenda do wklejenia.
 
 - Mierzy czas ticku (MSPT) i TPS co tick, na sredniej kroczacej - pojedynczy skok nie wywoluje alarmu.
 - Po nieprzerwanym przekroczeniu progu skanuje wszystkie zaladowane chunki i wskazuje top 5 podejrzanych.
+  Skan jest rozlozony na kolejne ticki z budzetem 3 ms na tick, wiec sam nie robi zwiechy.
 - Zgaduje przyczyne: farma mobow, zalegajace przedmioty, redstone/hoppery, skupisko graczy, ogolne przeciazenie encjami.
 - Wysyla embed na Discorda z koordynatami, przyczyna i sugerowana akcja - jezykiem admina, nie profilera.
 - Cooldown miedzy alertami (domyslnie 5 min), zeby nie zaspamowac kanalu.
@@ -106,4 +107,15 @@ com/../ticksentry
 ```
 
 Testy jednostkowe (`./gradlew test`) pokrywaja logike oceny chunkow i budowanie JSON-a embeda -
-19 testow, bez mockowania Bukkita.
+20 testow, bez mockowania Bukkita.
+
+## Skad wziete progi
+
+Wagi i progi w `HotspotAnalyzer` byly kalibrowane na dzialajacym serwerze Paper 1.21.10:
+
+- `MIN_INTERESTING_SCORE = 80` - przy 25 zwykly chunk z kilkudziesiecioma spadajacymi blokami
+  podczas generowania terenu dostawal etykiete "farma mobow".
+- `FALLING_BLOCK`, `ARROW`, `SNOWBALL` maja obnizone wagi - pojawiaja sie masowo, ale krotko.
+- Gracz wazy 5.0, bo trzyma zaladowane chunki wokol siebie i generuje ruch sieciowy.
+
+Jesli na Twoim serwerze alerty sa zbyt czule albo zbyt gluche, to sa pierwsze miejsca do zmiany.

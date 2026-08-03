@@ -71,6 +71,20 @@ public final class SparkBridge {
         return stats == null ? null : stats.describe();
     }
 
+    /**
+     * Druga droga do sparka: statyczny {@code SparkProvider.get()}.
+     * Spark wbudowany w Papera nie rejestruje sie w ServicesManagerze, ale ustawia ten provider.
+     *
+     * @return instancja sparka albo {@code null}
+     */
+    private static Object staticProvider() {
+        try {
+            return Class.forName("me.lucko.spark.api.SparkProvider").getMethod("get").invoke(null);
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            return null;
+        }
+    }
+
     /** Znajduje metode {@code poll} niezaleznie od wymazanego typu parametru okna. */
     private static Method pollMethod(Object statistic) throws NoSuchMethodException {
         for (Method method : statistic.getClass().getMethods()) {
@@ -105,23 +119,29 @@ public final class SparkBridge {
         if (spark != null) {
             return spark;
         }
-        // Probujemy raz na starcie, a potem dopiero gdy spark faktycznie sie pojawi w rejestrze uslug.
+        boolean first = !attemptedHook;
+        attemptedHook = true;
         try {
             Class<?> sparkClass = Class.forName("me.lucko.spark.api.Spark");
             RegisteredServiceProvider<?> provider =
                     plugin.getServer().getServicesManager().getRegistration((Class) sparkClass);
-            if (provider != null) {
-                spark = provider.getProvider();
-                if (!attemptedHook) {
-                    plugin.getLogger().info("Wykryto spark - alerty beda wzbogacone o jego statystyki.");
+            spark = provider != null ? provider.getProvider() : staticProvider();
+
+            if (spark == null) {
+                if (first) {
+                    plugin.getLogger().info("Spark jest obecny, ale jeszcze nie udostepnil API "
+                            + "- alerty korzystaja z wlasnych pomiarow.");
                 }
+                return null;
+            }
+            if (first) {
+                plugin.getLogger().info("Wykryto spark - alerty beda wzbogacone o jego statystyki.");
             }
         } catch (ClassNotFoundException | NoClassDefFoundError ignored) {
-            // Spark nie jest zainstalowany - calkowicie normalny przypadek.
+            // Spark nie jest zainstalowany - calkowicie normalny przypadek, milczymy.
         } catch (RuntimeException ex) {
             plugin.getLogger().fine("Nie udalo sie podpiac pod spark: " + ex);
         }
-        attemptedHook = true;
         return spark;
     }
 

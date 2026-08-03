@@ -86,21 +86,28 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                 ? ChatColor.GREEN + "skonfigurowany" : ChatColor.YELLOW + "wylaczony lub brak webhooka"));
 
         String spark = plugin.sparkBridge().summary();
-        if (spark != null) {
-            sender.sendMessage(ChatColor.DARK_GRAY + spark);
-        }
+        sender.sendMessage(ChatColor.GRAY + "Spark: " + (spark == null
+                ? ChatColor.DARK_GRAY + "niedostepny (uzywam wlasnych pomiarow)"
+                : ChatColor.WHITE + spark));
     }
 
     /** Wymusza skan i wypisuje wynik w czacie; opcjonalnie wysyla go tez na Discorda. */
     private void showReport(CommandSender sender, boolean alsoDiscord) {
-        LagEvent event = plugin.runScan(true);
+        boolean started = plugin.runScan(true, event -> printReport(sender, event, alsoDiscord));
+        if (!started) {
+            sender.sendMessage(ChatColor.YELLOW + "Skan juz trwa - wynik pojawi sie za chwile.");
+        }
+    }
+
+    /** Wypisuje gotowy raport; wywolywane po zakonczeniu skanu rozlozonego na ticki. */
+    private void printReport(CommandSender sender, LagEvent event, boolean alsoDiscord) {
         plugin.alertHistory().record(event);
 
         header(sender, "Raport");
         sender.sendMessage(ChatColor.GRAY + "TPS " + ChatColor.WHITE + String.format(Locale.ROOT, "%.2f", event.tps())
                 + ChatColor.GRAY + ", czas ticku " + ChatColor.WHITE + String.format(Locale.ROOT, "%.1f ms", event.averageMspt())
                 + ChatColor.GRAY + ", przeskanowano " + ChatColor.WHITE + event.loadedChunks() + ChatColor.GRAY
-                + " chunkow (" + event.totalEntities() + " encji) w " + event.scanDurationMs() + " ms.");
+                + " chunkow (" + event.totalEntities() + " encji).");
 
         if (event.topChunks().isEmpty()) {
             sender.sendMessage(ChatColor.GREEN + "Zaden chunk sie nie wyroznia - swiat gry wyglada spokojnie.");

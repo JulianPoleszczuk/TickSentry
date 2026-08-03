@@ -159,8 +159,8 @@ public final class DiscordWebhookClient {
                 .title(healthy ? "Raport na zadanie: serwer wyglada zdrowo" : title(event))
                 .color(healthy ? COLOR_OK : color(event.tps()))
                 .timestamp(event.timestamp())
-                .footer("TickSentry - przeskanowano " + event.loadedChunks() + " chunkow w "
-                        + event.scanDurationMs() + " ms, lacznie " + event.totalEntities() + " encji");
+                .footer("TickSentry - przeskanowano " + event.loadedChunks() + " chunkow, lacznie "
+                        + event.totalEntities() + " encji");
 
         embed.description(healthy
                 ? "Sprawdzono na zadanie admina. Serwer wyrabia sie z przetwarzaniem swiata."

@@ -19,14 +19,20 @@ import java.util.stream.Collectors;
  */
 public final class HotspotAnalyzer {
 
-    /** Ponizej tego wyniku chunk nie jest uznawany za podejrzany. */
-    public static final double MIN_INTERESTING_SCORE = 25.0D;
+    /**
+     * Ponizej tego wyniku chunk nie jest uznawany za podejrzany.
+     *
+     * <p>Prog skalibrowany na zywym serwerze: przy wartosci 25 zwykly chunk z kilkudziesiecioma
+     * spadajacymi blokami podczas generowania terenu dostawal etykiete "farma mobow".
+     * Chunk musi wyraznie odstawac, zeby w ogole trafil do raportu.</p>
+     */
+    public static final double MIN_INTERESTING_SCORE = 80.0D;
 
     /** Udzial jednego typu encji, od ktorego mowimy o "dominacji" (farma, zwal itemow). */
     private static final double DOMINANCE_SHARE = 0.5D;
 
     /** Od tylu encji chunk w ogole moze dostac kategorie zwiazana z encjami. */
-    private static final int ENTITY_HEAVY_COUNT = 40;
+    private static final int ENTITY_HEAVY_COUNT = 60;
 
     /** Od tylu graczy mowimy o skupisku graczy. */
     private static final int PLAYER_CLUSTER_COUNT = 5;
@@ -38,10 +44,15 @@ public final class HotspotAnalyzer {
     private static final double DEFAULT_TILE_WEIGHT = 0.3D;
 
     private static final Map<String, Double> ENTITY_WEIGHTS = Map.ofEntries(
-            Map.entry("PLAYER", 1.0D),
+            // Gracz kosztuje duzo wiecej niz mob: trzyma zaladowane chunki wokol siebie i generuje ruch sieciowy.
+            Map.entry("PLAYER", 5.0D),
             Map.entry("ITEM", 0.5D),
             Map.entry("DROPPED_ITEM", 0.5D),
             Map.entry("EXPERIENCE_ORB", 0.6D),
+            // Encje krotkotrwale - pojawiaja sie masowo przy generowaniu terenu i walce, ale szybko znikaja.
+            Map.entry("FALLING_BLOCK", 0.3D),
+            Map.entry("ARROW", 0.3D),
+            Map.entry("SNOWBALL", 0.2D),
             Map.entry("ARMOR_STAND", 0.4D),
             Map.entry("ITEM_FRAME", 0.2D),
             Map.entry("GLOW_ITEM_FRAME", 0.2D),
