@@ -2,8 +2,10 @@ package dev.poleszczuk.ticksentry.commands;
 
 import dev.poleszczuk.ticksentry.TickSentryPlugin;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
+import dev.poleszczuk.ticksentry.monitor.LagCategory;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
 import dev.poleszczuk.ticksentry.monitor.TickMonitor;
+import dev.poleszczuk.ticksentry.storage.StoredIncident;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -23,11 +25,16 @@ import java.util.Locale;
 public final class LagWatchCommand implements CommandExecutor, TabCompleter {
 
     private static final String PERMISSION = "ticksentry.admin";
-    private static final List<String> SUBCOMMANDS = List.of("status", "report", "history", "reload");
+    private static final List<String> SUBCOMMANDS = List.of("status", "report", "history", "stats", "reload");
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
+    private static final DateTimeFormatter DATE_TIME =
+            DateTimeFormatter.ofPattern("dd.MM HH:mm").withZone(ZoneId.systemDefault());
 
     /** Ile incydentow pokazuje {@code /lagwatch history}. */
     private static final int HISTORY_SHOWN = 8;
+
+    /** Domyslny okres analizowany przez {@code /lagwatch stats}. */
+    private static final int DEFAULT_STATS_DAYS = 7;
 
     private final TickSentryPlugin plugin;
 
@@ -50,8 +57,9 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
             case "status" -> showStatus(sender);
             case "report" -> showReport(sender, args.length > 1 && "discord".equalsIgnoreCase(args[1]));
             case "history" -> showHistory(sender);
+            case "stats" -> showStats(sender, parseDays(args));
             case "reload" -> reload(sender);
-            default -> sender.sendMessage(ChatColor.RED + "Uzycie: /" + label + " <status|report|history|reload>");
+            default -> sender.sendMessage(ChatColor.RED + "Uzycie: /" + label + " <status|report|history|stats|reload>");
         }
         return true;
     }
@@ -89,6 +97,8 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GRAY + "Spark: " + (spark == null
                 ? ChatColor.DARK_GRAY + "niedostepny (uzywam wlasnych pomiarow)"
                 : ChatColor.WHITE + spark));
+        sender.sendMessage(ChatColor.GRAY + "Historia: " + ChatColor.WHITE + plugin.alertStore().describe()
+                + ChatColor.DARK_GRAY + " (" + Plural.incidents(plugin.incidentsLast24h()) + " w ostatniej dobie)");
     }
 
     /** Wymusza skan i wypisuje wynik w czacie; opcjonalnie wysyla go tez na Discorda. */
@@ -101,7 +111,7 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
 
     /** Wypisuje gotowy raport; wywolywane po zakonczeniu skanu rozlozonego na ticki. */
     private void printReport(CommandSender sender, LagEvent event, boolean alsoDiscord) {
-        plugin.alertHistory().record(event);
+        plugin.recordManual(event);
 
         header(sender, "Raport");
         sender.sendMessage(ChatColor.GRAY + "TPS " + ChatColor.WHITE + String.format(Locale.ROOT, "%.2f", event.tps())
@@ -135,22 +145,75 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    /** Wypisuje ostatnie incydenty z tej sesji serwera. */
+    /** Wypisuje ostatnie incydenty; przy skladzie SQLite obejmuje takze te sprzed restartu. */
     private void showHistory(CommandSender sender) {
-        List<LagEvent> history = plugin.alertHistory().recent(HISTORY_SHOWN);
-        header(sender, "Historia");
-        if (history.isEmpty()) {
-            sender.sendMessage(ChatColor.GREEN + "Od startu serwera nie bylo zadnego incydentu.");
-            return;
+        plugin.alertStore().recent(HISTORY_SHOWN, incidents -> {
+            header(sender, "Historia");
+            if (incidents.isEmpty()) {
+                sender.sendMessage(ChatColor.GREEN + "Nie zapisano jeszcze zadnego incydentu.");
+                return;
+            }
+            for (StoredIncident incident : incidents) {
+                boolean today = Duration.between(incident.timestamp(), Instant.now()).toHours() < 24L;
+                DateTimeFormatter format = today ? TIME : DATE_TIME;
+                sender.sendMessage(ChatColor.DARK_GRAY + format.format(incident.timestamp()) + ChatColor.GRAY
+                        + " (" + ago(incident.timestamp()) + " temu) " + ChatColor.WHITE
+                        + String.format(Locale.ROOT, "%.0f ms", incident.mspt())
+                        + ChatColor.GRAY + " - " + incident.category().title()
+                        + (incident.world() == null ? "" : ChatColor.DARK_GRAY + " @ " + incident.prettyLocation())
+                        + (incident.manual() ? ChatColor.DARK_GRAY + " [recznie]" : ""));
+            }
+        });
+    }
+
+    /** Wypisuje podsumowanie incydentow: ile, przez co i o ktorej godzinie najczesciej. */
+    private void showStats(CommandSender sender, int days) {
+        plugin.alertStore().stats(days, stats -> {
+            header(sender, "Statystyki (" + days + " dni)");
+            if (stats.total() == 0) {
+                sender.sendMessage(ChatColor.GREEN + "Brak incydentow w tym okresie - serwer trzymal sie dobrze.");
+                return;
+            }
+
+            sender.sendMessage(ChatColor.GRAY + "Zapisano: " + ChatColor.WHITE + Plural.incidents(stats.total()));
+
+            LagCategory dominant = stats.dominantCategory();
+            if (dominant != null) {
+                sender.sendMessage(ChatColor.GRAY + "Najczestsza przyczyna: " + ChatColor.AQUA + dominant.title()
+                        + ChatColor.DARK_GRAY + " (" + stats.byCategory().getOrDefault(dominant, 0) + "x)");
+            }
+
+            int worstHour = stats.worstHour();
+            if (worstHour >= 0) {
+                sender.sendMessage(ChatColor.GRAY + "Najgorsza pora: " + ChatColor.WHITE
+                        + String.format("%02d:00-%02d:59", worstHour, worstHour)
+                        + ChatColor.DARK_GRAY + " (" + Plural.incidents(stats.byHour()[worstHour]) + ")");
+            }
+
+            StoredIncident worst = stats.worst();
+            if (worst != null) {
+                sender.sendMessage(ChatColor.GRAY + "Najciezszy moment: " + ChatColor.WHITE
+                        + String.format(Locale.ROOT, "%.0f ms", worst.mspt()) + ChatColor.DARK_GRAY
+                        + " " + DATE_TIME.format(worst.timestamp()) + " - " + worst.prettyLocation());
+            }
+
+            List<String> histogram = stats.hourHistogram();
+            if (!histogram.isEmpty()) {
+                sender.sendMessage(ChatColor.GRAY + "Rozklad w ciagu doby:");
+                histogram.forEach(line -> sender.sendMessage(ChatColor.DARK_GRAY + " " + line));
+            }
+        });
+    }
+
+    /** Czyta opcjonalna liczbe dni z argumentow komendy. */
+    private static int parseDays(String[] args) {
+        if (args.length < 2) {
+            return DEFAULT_STATS_DAYS;
         }
-        for (LagEvent event : history) {
-            ChunkStat primary = event.primaryChunk();
-            sender.sendMessage(ChatColor.DARK_GRAY + TIME.format(event.timestamp()) + ChatColor.GRAY
-                    + " (" + ago(event.timestamp()) + " temu) " + ChatColor.WHITE
-                    + String.format(Locale.ROOT, "%.0f ms", event.averageMspt())
-                    + ChatColor.GRAY + " - " + event.category().title()
-                    + (primary == null ? "" : ChatColor.DARK_GRAY + " @ " + primary.prettyLocation())
-                    + (event.manual() ? ChatColor.DARK_GRAY + " [recznie]" : ""));
+        try {
+            return Math.min(365, Math.max(1, Integer.parseInt(args[1])));
+        } catch (NumberFormatException ex) {
+            return DEFAULT_STATS_DAYS;
         }
     }
 
@@ -202,6 +265,9 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2 && "report".equalsIgnoreCase(args[0])) {
             return List.of("discord");
+        }
+        if (args.length == 2 && "stats".equalsIgnoreCase(args[0])) {
+            return List.of("1", "7", "30");
         }
         return List.of();
     }

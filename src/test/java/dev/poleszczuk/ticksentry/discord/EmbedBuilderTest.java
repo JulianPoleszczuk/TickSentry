@@ -52,6 +52,15 @@ class EmbedBuilderTest {
     }
 
     @Test
+    @DisplayName("Czas trwania incydentu opisywany jest po ludzku")
+    void formatsDuration() {
+        assertEquals("45 s", DiscordWebhookClient.humanDuration(45L));
+        assertEquals("2 min", DiscordWebhookClient.humanDuration(120L));
+        assertEquals("4 min 12 s", DiscordWebhookClient.humanDuration(252L));
+        assertEquals("1 h 5 min", DiscordWebhookClient.humanDuration(3900L));
+    }
+
+    @Test
     @DisplayName("Zbyt dlugi opis jest przycinany do limitu Discorda")
     void truncatesLongDescription() {
         String json = new EmbedBuilder().description("x".repeat(5000)).toJson();

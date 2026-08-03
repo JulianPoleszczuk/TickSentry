@@ -12,6 +12,17 @@ monitor:
   scan-cooldown-seconds: 300
   # Z ilu ostatnich tickow liczona jest srednia kroczaca.
   rolling-average-ticks: 100
+  # Wyslac osobna wiadomosc, gdy serwer wroci do normy po incydencie?
+  recovery-alert: true
+  # Ile sekund serwer musi trzymac sie ponizej progu, zanim uznamy lag za zakonczony.
+  recovery-seconds: 15
+
+storage:
+  # Zapisywac incydenty do pliku, zeby przetrwaly restart serwera?
+  # Przy false historia zyje tylko w pamieci.
+  enabled: true
+  # Po ilu dniach kasowac stare wpisy (0 = trzymaj wszystko).
+  keep-days: 30
 
 discord:
   enabled: true

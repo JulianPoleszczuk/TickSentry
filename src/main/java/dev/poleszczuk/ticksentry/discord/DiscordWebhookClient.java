@@ -73,6 +73,51 @@ public final class DiscordWebhookClient {
         executor.execute(() -> post(url, payload));
     }
 
+    /**
+     * Wysyla informacje o powrocie serwera do normy.
+     *
+     * @param durationSeconds jak dlugo trwal incydent
+     * @param tps             TPS po powrocie do normy
+     * @param mspt            czas ticku po powrocie do normy
+     */
+    public void sendRecovery(long durationSeconds, double tps, double mspt) {
+        if (!config.discordEnabled()) {
+            return;
+        }
+        EmbedBuilder embed = new EmbedBuilder()
+                .title("Serwer wrocil do normy")
+                .color(COLOR_OK)
+                .timestamp(java.time.Instant.now())
+                .description("Lag sie skonczyl - serwer znowu wyrabia sie z przetwarzaniem swiata.")
+                .field("Jak dlugo trwal", humanDuration(durationSeconds), true)
+                .field("Teraz", String.format(Locale.ROOT, "TPS: **%.1f** / 20%nCzas ticku: **%.0f ms**", tps, mspt), true)
+                .footer("TickSentry");
+
+        String payload = "{\"username\":\"TickSentry\",\"allowed_mentions\":{\"parse\":[]},\"embeds\":["
+                + embed.toJson() + "]}";
+        String url = config.webhookUrl();
+        executor.execute(() -> post(url, payload));
+    }
+
+    /**
+     * Zamienia liczbe sekund na opis typu "4 min 12 s".
+     *
+     * @param seconds czas trwania w sekundach
+     * @return czytelny opis
+     */
+    static String humanDuration(long seconds) {
+        if (seconds < 60L) {
+            return seconds + " s";
+        }
+        long minutes = seconds / 60L;
+        long rest = seconds % 60L;
+        if (minutes < 60L) {
+            return rest == 0L ? minutes + " min" : minutes + " min " + rest + " s";
+        }
+        long hours = minutes / 60L;
+        return hours + " h " + (minutes % 60L) + " min";
+    }
+
     /** Zamyka watek wysylkowy, dajac chwile na dokonczenie zaleglych zadan. */
     public void shutdown() {
         executor.shutdown();

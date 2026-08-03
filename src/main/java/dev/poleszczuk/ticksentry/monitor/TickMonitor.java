@@ -5,6 +5,8 @@ import org.bukkit.Server;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.util.function.LongConsumer;
+
 /**
  * Mierzy kondycje serwera co tick i zglasza trwale przeciazenie.
  *
@@ -23,6 +25,7 @@ public final class TickMonitor implements Runnable {
     private final ConfigManager config;
     private final Server server;
     private final Runnable onSustainedLag;
+    private final LongConsumer onRecovered;
 
     private double[] msptSamples;
     private double[] intervalSamples;
@@ -34,16 +37,22 @@ public final class TickMonitor implements Runnable {
     private long lastAlertMillis = 0L;
     private BukkitTask task;
 
+    private boolean inIncident;
+    private long incidentStartMillis = -1L;
+    private long recoveryStartMillis = -1L;
+
     /**
      * @param plugin         instancja pluginu (uzywana do schedulera)
      * @param config         zrodlo progow i okien czasowych
      * @param onSustainedLag akcja wywolywana na glownym watku po wykryciu trwalego lagu
+     * @param onRecovered    akcja wywolywana po powrocie do normy, z czasem trwania incydentu w sekundach
      */
-    public TickMonitor(Plugin plugin, ConfigManager config, Runnable onSustainedLag) {
+    public TickMonitor(Plugin plugin, ConfigManager config, Runnable onSustainedLag, LongConsumer onRecovered) {
         this.plugin = plugin;
         this.config = config;
         this.server = plugin.getServer();
         this.onSustainedLag = onSustainedLag;
+        this.onRecovered = onRecovered;
         resizeWindow();
     }
 
@@ -75,6 +84,7 @@ public final class TickMonitor implements Runnable {
         resizeWindow();
         lastTickNanos = 0L;
         breachStartMillis = -1L;
+        recoveryStartMillis = -1L;
     }
 
     @Override
@@ -105,8 +115,12 @@ public final class TickMonitor implements Runnable {
         long nowMillis = System.currentTimeMillis();
         if (averageMspt() <= config.msptThresholdMs()) {
             breachStartMillis = -1L;
+            checkRecovery(nowMillis);
             return;
         }
+
+        // Serwer znowu przekracza prog - ewentualne odliczanie do "wrocil do normy" zaczyna sie od zera.
+        recoveryStartMillis = -1L;
 
         if (breachStartMillis < 0L) {
             breachStartMillis = nowMillis;
@@ -115,6 +129,12 @@ public final class TickMonitor implements Runnable {
 
         if (nowMillis - breachStartMillis < config.sustainedSeconds() * 1000L) {
             return;
+        }
+
+        // Incydent liczymy od momentu pierwszego przekroczenia progu, nie od chwili wyslania alertu.
+        if (!inIncident) {
+            inIncident = true;
+            incidentStartMillis = breachStartMillis;
         }
 
         // Prog trzyma sie wystarczajaco dlugo - liczymy okno od nowa niezaleznie od cooldownu,
@@ -131,6 +151,39 @@ public final class TickMonitor implements Runnable {
         } catch (RuntimeException ex) {
             plugin.getLogger().warning("Blad podczas obslugi wykrytego lagu: " + ex);
         }
+    }
+
+    /**
+     * Pilnuje, czy trwajacy incydent juz sie skonczyl.
+     * Wymagamy calego okna spokoju, zeby nie oglaszac powrotu do normy przy chwilowym oddechu serwera.
+     */
+    private void checkRecovery(long nowMillis) {
+        if (!inIncident) {
+            return;
+        }
+        if (recoveryStartMillis < 0L) {
+            recoveryStartMillis = nowMillis;
+            return;
+        }
+        if (nowMillis - recoveryStartMillis < config.recoverySeconds() * 1000L) {
+            return;
+        }
+
+        long durationSeconds = Math.max(0L, (nowMillis - incidentStartMillis) / 1000L);
+        inIncident = false;
+        recoveryStartMillis = -1L;
+        incidentStartMillis = -1L;
+
+        try {
+            onRecovered.accept(durationSeconds);
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("Blad podczas obslugi powrotu do normy: " + ex);
+        }
+    }
+
+    /** @return {@code true}, jesli trwa niezakonczony incydent lagu */
+    public boolean isInIncident() {
+        return inIncident;
     }
 
     /** @return srednia krocząca MSPT z okna pomiarowego, w milisekundach */

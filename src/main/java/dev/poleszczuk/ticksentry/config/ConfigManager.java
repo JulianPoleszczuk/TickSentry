@@ -30,6 +30,11 @@ public final class ConfigManager {
     private volatile Set<String> ignoredWorlds;
     private volatile int topChunksCount;
 
+    private volatile boolean recoveryAlert;
+    private volatile int recoverySeconds;
+    private volatile boolean storageEnabled;
+    private volatile int storageKeepDays;
+
     /**
      * Tworzy managera i od razu wczytuje konfiguracje z dysku.
      *
@@ -52,6 +57,11 @@ public final class ConfigManager {
         this.sustainedSeconds = Math.max(1, cfg.getInt("monitor.sustained-seconds", 10));
         this.scanCooldownSeconds = Math.max(0, cfg.getInt("monitor.scan-cooldown-seconds", 300));
         this.rollingAverageTicks = Math.min(6000, Math.max(20, cfg.getInt("monitor.rolling-average-ticks", 100)));
+        this.recoveryAlert = cfg.getBoolean("monitor.recovery-alert", true);
+        this.recoverySeconds = Math.max(1, cfg.getInt("monitor.recovery-seconds", 15));
+
+        this.storageEnabled = cfg.getBoolean("storage.enabled", true);
+        this.storageKeepDays = Math.max(0, cfg.getInt("storage.keep-days", 30));
 
         this.discordEnabled = cfg.getBoolean("discord.enabled", true);
         this.webhookUrl = cfg.getString("discord.webhook-url", "").trim();
@@ -112,5 +122,25 @@ public final class ConfigManager {
     /** @return ile najbardziej podejrzanych chunkow ma zwrocic skaner */
     public int topChunksCount() {
         return topChunksCount;
+    }
+
+    /** @return czy wysylac osobna wiadomosc po powrocie serwera do normy */
+    public boolean recoveryAlert() {
+        return recoveryAlert;
+    }
+
+    /** @return ile sekund ponizej progu oznacza koniec incydentu */
+    public int recoverySeconds() {
+        return recoverySeconds;
+    }
+
+    /** @return czy incydenty maja byc zapisywane na dysk */
+    public boolean storageEnabled() {
+        return storageEnabled;
+    }
+
+    /** @return po ilu dniach kasowac stare incydenty (0 = nigdy) */
+    public int storageKeepDays() {
+        return storageKeepDays;
     }
 }

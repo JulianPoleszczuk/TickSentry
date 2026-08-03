@@ -4,12 +4,16 @@ main: dev.poleszczuk.ticksentry.TickSentryPlugin
 api-version: '1.20'
 description: Ciagly monitoring wydajnosci serwera z automatycznym wykrywaniem zrodla lagow i alertami na Discord.
 author: Julian Poleszczuk
-softdepend: [spark]
+softdepend: [spark, PlaceholderAPI]
+
+# Paper pobiera te biblioteke sam przy pierwszym starcie - nie musi byc w jarze.
+libraries:
+  - org.xerial:sqlite-jdbc:3.47.1.0
 
 commands:
   lagwatch:
     description: Zarzadzanie monitoringiem lagow.
-    usage: /lagwatch <status|report|history|reload>
+    usage: /lagwatch <status|report|history|stats|reload>
     aliases: [ts, ticksentry]
     permission: ticksentry.admin
 
