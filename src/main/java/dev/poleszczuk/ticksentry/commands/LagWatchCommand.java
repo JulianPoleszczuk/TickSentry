@@ -84,6 +84,11 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         }
         sender.sendMessage(ChatColor.GRAY + "Discord: " + (plugin.configManager().discordEnabled()
                 ? ChatColor.GREEN + "skonfigurowany" : ChatColor.YELLOW + "wylaczony lub brak webhooka"));
+
+        String spark = plugin.sparkBridge().summary();
+        if (spark != null) {
+            sender.sendMessage(ChatColor.DARK_GRAY + spark);
+        }
     }
 
     /** Wymusza skan i wypisuje wynik w czacie; opcjonalnie wysyla go tez na Discorda. */
@@ -108,6 +113,9 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                         + stat.tileEntityCount() + " block-entity" + describeDominant(stat));
             }
             sender.sendMessage(ChatColor.YELLOW + event.suggestedAction());
+        }
+        if (event.sparkSummary() != null) {
+            sender.sendMessage(ChatColor.DARK_GRAY + event.sparkSummary());
         }
 
         if (alsoDiscord) {

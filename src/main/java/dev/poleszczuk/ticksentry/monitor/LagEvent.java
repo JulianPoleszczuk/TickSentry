@@ -17,6 +17,7 @@ import java.util.List;
  * @param suggestedAction podpowiedz dla admina
  * @param scanDurationMs ile trwalo samo skanowanie chunkow
  * @param manual         czy incydent zostal wywolany recznie komenda {@code /lagwatch report}
+ * @param sparkSummary   dodatkowe statystyki ze sparka albo {@code null}, gdy sparka nie ma
  */
 public record LagEvent(
         Instant timestamp,
@@ -29,7 +30,8 @@ public record LagEvent(
         LagCategory category,
         String suggestedAction,
         long scanDurationMs,
-        boolean manual
+        boolean manual,
+        String sparkSummary
 ) {
 
     /**
@@ -44,10 +46,12 @@ public record LagEvent(
      * @param topChunks      posortowana lista podejrzanych chunkow
      * @param scanDurationMs czas trwania skanowania
      * @param manual         czy skan byl reczny
+     * @param sparkSummary   statystyki ze sparka albo {@code null}
      * @return gotowy do wyslania incydent
      */
     public static LagEvent of(double tps, double averageMspt, double peakMs, int loadedChunks,
-                              int totalEntities, List<ChunkStat> topChunks, long scanDurationMs, boolean manual) {
+                              int totalEntities, List<ChunkStat> topChunks, long scanDurationMs,
+                              boolean manual, String sparkSummary) {
         ChunkStat primary = topChunks.isEmpty() ? null : topChunks.get(0);
         LagCategory category = primary == null ? LagCategory.UNKNOWN : HotspotAnalyzer.categorize(primary);
         String action = primary == null
@@ -55,7 +59,7 @@ public record LagEvent(
                         ChunkStat.ofEntities("-", 0, 0, java.util.Map.of()), LagCategory.UNKNOWN)
                 : HotspotAnalyzer.suggestedAction(primary, category);
         return new LagEvent(Instant.now(), tps, averageMspt, peakMs, loadedChunks, totalEntities,
-                List.copyOf(topChunks), category, action, scanDurationMs, manual);
+                List.copyOf(topChunks), category, action, scanDurationMs, manual, sparkSummary);
     }
 
     /** @return najbardziej podejrzany chunk albo {@code null}, gdy zaden sie nie wyroznil */

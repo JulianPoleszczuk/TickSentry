@@ -178,6 +178,10 @@ public final class DiscordWebhookClient {
 
         embed.field("Co z tym zrobic", event.suggestedAction(), false);
 
+        if (event.sparkSummary() != null) {
+            embed.field("Dokladniejszy pomiar", event.sparkSummary(), false);
+        }
+
         List<ChunkStat> others = event.topChunks().stream().skip(1).limit(EXTRA_CHUNKS_SHOWN).toList();
         if (!others.isEmpty()) {
             StringBuilder list = new StringBuilder();

@@ -30,14 +30,17 @@ public final class ChunkHotspotScanner {
 
     private final Plugin plugin;
     private final ConfigManager config;
+    private final SparkBridge spark;
 
     /**
      * @param plugin instancja pluginu (dostep do serwera i logu)
      * @param config zrodlo listy pomijanych swiatow i limitu wynikow
+     * @param spark  opcjonalne zrodlo dodatkowych statystyk
      */
-    public ChunkHotspotScanner(Plugin plugin, ConfigManager config) {
+    public ChunkHotspotScanner(Plugin plugin, ConfigManager config, SparkBridge spark) {
         this.plugin = plugin;
         this.config = config;
+        this.spark = spark;
     }
 
     /**
@@ -77,7 +80,7 @@ public final class ChunkHotspotScanner {
         if (durationMs > 50L) {
             plugin.getLogger().info("Skan " + loadedChunks + " chunkow zajal " + durationMs + " ms.");
         }
-        return LagEvent.of(tps, mspt, peakMs, loadedChunks, totalEntities, top, durationMs, manual);
+        return LagEvent.of(tps, mspt, peakMs, loadedChunks, totalEntities, top, durationMs, manual, spark.summary());
     }
 
     /** Zamienia surowe tablice z Bukkita na niezalezna od API migawke chunka. */

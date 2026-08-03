@@ -6,6 +6,7 @@ import dev.poleszczuk.ticksentry.discord.DiscordWebhookClient;
 import dev.poleszczuk.ticksentry.monitor.ChunkHotspotScanner;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
+import dev.poleszczuk.ticksentry.monitor.SparkBridge;
 import dev.poleszczuk.ticksentry.monitor.TickMonitor;
 import dev.poleszczuk.ticksentry.storage.AlertHistory;
 import org.bukkit.command.PluginCommand;
@@ -21,6 +22,7 @@ public final class TickSentryPlugin extends JavaPlugin {
     private ChunkHotspotScanner scanner;
     private DiscordWebhookClient webhook;
     private AlertHistory alertHistory;
+    private SparkBridge sparkBridge;
 
     /** Ile ostatnich incydentow pamieta plugin do {@code /lagwatch history}. */
     private static final int HISTORY_CAPACITY = 25;
@@ -30,7 +32,8 @@ public final class TickSentryPlugin extends JavaPlugin {
         saveDefaultConfig();
         this.configManager = new ConfigManager(this);
         this.alertHistory = new AlertHistory(HISTORY_CAPACITY);
-        this.scanner = new ChunkHotspotScanner(this, configManager);
+        this.sparkBridge = new SparkBridge(this);
+        this.scanner = new ChunkHotspotScanner(this, configManager, sparkBridge);
         this.webhook = new DiscordWebhookClient(this, configManager);
         this.tickMonitor = new TickMonitor(this, configManager, this::handleSustainedLag);
         this.tickMonitor.start();
@@ -102,5 +105,10 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** @return historia incydentow z biezacej sesji serwera */
     public AlertHistory alertHistory() {
         return alertHistory;
+    }
+
+    /** @return miekkie podpiecie pod spark (moze byc niedostepne) */
+    public SparkBridge sparkBridge() {
+        return sparkBridge;
     }
 }
