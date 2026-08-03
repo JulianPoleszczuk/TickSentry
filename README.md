@@ -1,224 +1,238 @@
 # TickSentry
 
-A Minecraft Paper plugin that watches server performance in the background, works out **where**
-the lag is coming from, and posts a readable alert to Discord.
+A plugin for Minecraft servers that watches performance and tells you **what is causing lag**.
 
-Its edge over spark is not depth of analysis - it is that nobody has to run anything. The alert
-arrives on its own, with a ready-to-paste command.
+When the server slows down, TickSentry checks every loaded chunk, finds the worst one, and sends
+you a message on Discord with the coordinates and a command you can paste to fix it.
+
+You do not have to run anything or watch anything. It works on its own.
+
+```
+Sustained lag detected: MSPT 80.1 ms, TPS 18.29. Cause: Mob farm.
+ - world @ 1608, 1608 (entities: 1292, block entities: 0)
+Suggestion: Go there (/tp 1608 ~ 1608). Suspected farm: 841x cow.
+            Quick fix: /kill @e[type=cow,x=1600,y=-64,z=1600,dx=16,dy=384,dz=16]
+```
 
 ## What it does
 
-- Measures tick time (MSPT) and TPS every tick using a rolling average, so a single spike never
-  triggers an alarm.
-- Once the threshold holds, scans every loaded chunk and names the five most suspicious ones.
-  The scan is spread across ticks with a 3 ms budget each, so it never stalls the server itself.
-- Guesses the cause: mob farm, dropped items, redstone/hoppers, player crowd, general entity overload.
-- Sends a Discord embed with coordinates, the cause and a suggested action - written for an admin,
-  not for a profiler user.
-- Cooldown between alerts (5 minutes by default) so the channel does not get spammed.
-- Posts a separate green "server is back to normal" message with the incident duration.
-- Stores incidents in SQLite, so history survives restarts and `/lagwatch stats` can show which
-  hour of the day the server struggles most.
-- Ships a **web panel** with a tick time chart and an incident list - no hosting, no external
-  service, everything runs on the machine that runs the server.
-- If **spark** is installed, adds its statistics (mean and 95th percentile tick time).
-- If **PlaceholderAPI** is installed, exposes `%ticksentry_tps%`, `%ticksentry_mspt%` and more.
+- Checks how long each tick takes. One slow tick is normal, so it only warns you when the server
+  stays slow for a while.
+- Finds the chunk causing the problem and tells you what is in it.
+- Names the cause: a mob farm, dropped items, hoppers, a crowd of players, or too many entities.
+- Sends the alert to Discord, then sends a second message when the server is fine again.
+- Saves every incident, so you can ask what time of day your server usually struggles.
+- Has a small web page with a chart, if you want one.
 
-## Requirements
+## Install
 
-- **Minecraft 1.16.5 up to the newest release** - Paper, Spigot or any fork of them
-- **Java 11 or newer**
+1. Download `TickSentry-1.0.0.jar` (or build it - see the bottom of this page).
+2. Put it in your server's `plugins` folder.
+3. Restart the server.
 
-The plugin is built against the 1.16.5 API and compiled to Java 11 bytecode, so a single jar
-covers every version from 1.16.5 onwards. From 1.17 the Java requirement takes care of itself,
-because Minecraft itself demands a newer runtime:
+That is all. The plugin starts working right away and writes its settings to
+`plugins/TickSentry/config.yml`.
 
-| Minecraft | Java required by the server | TickSentry |
+## Which versions work
+
+Minecraft **1.16.5 and anything newer**. You need **Java 11 or newer**.
+
+| Minecraft | Java your server needs | TickSentry |
 | --- | --- | --- |
-| 1.16.5 | 8+ (Paper recommends 11) | works on Java 11+ |
-| 1.17.x | 16+ | works |
-| 1.18 - 1.20.4 | 17+ | works |
-| 1.20.5 and newer | 21+ | works |
+| 1.16.5 | 8 or newer | works on Java 11+ |
+| 1.17 | 16 or newer | works |
+| 1.18 - 1.20.4 | 17 or newer | works |
+| 1.20.5 and newer | 21 or newer | works |
 
-The only case that will not run is a 1.16 server still on Java 8. Bumping such a server to
-Java 11 is recommended by Paper anyway.
+From 1.17 onwards you do not have to think about Java at all, because Minecraft already asks for
+a newer version than the plugin does. The only setup that will not work is a 1.16 server still
+running Java 8.
 
-Both ends of that range are verified on real servers, not just by compiling: **Paper 1.16.5
-(build 794) on Java 11** and **Paper 1.21.10 on Java 21**. On 1.16.5 the plugin loaded, pulled
-the SQLite driver, served the web panel, answered every command, spotted a chunk holding 454 cows
-as a mob farm, fired a sustained-lag alert and posted the recovery notice. Spark is absent there,
-which the reflective bridge handles silently.
-
-## Building
-
-```bash
-./gradlew build
-```
-
-The result lands in `build/libs/TickSentry-1.0.0.jar` - drop it into `plugins/` and restart.
-Building needs a JDK 21 toolchain, but the produced bytecode targets Java 11.
-
-## Configuration
-
-The first startup creates `plugins/TickSentry/config.yml`:
-
-```yaml
-monitor:
-  mspt-threshold-ms: 50      # above this many ms the server counts as overloaded
-  sustained-seconds: 10      # how long the threshold must hold before an alert
-  scan-cooldown-seconds: 300 # minimum gap between alerts
-  rolling-average-ticks: 100 # rolling average window
-  recovery-alert: true       # message once the server recovers
-  recovery-seconds: 15       # how much calm ends an incident
-discord:
-  enabled: true
-  webhook-url: ""
-  mention-role-id: ""        # optional role id to ping (digits only)
-scan:
-  ignored-worlds: []
-  top-chunks-count: 5
-storage:
-  enabled: true              # false = history in memory only, lost on restart
-  keep-days: 30              # delete entries older than this (0 = keep everything)
-dashboard:
-  enabled: false             # web panel in the browser
-  bind: "127.0.0.1"          # this machine only; 0.0.0.0 exposes it to the network
-  port: 8080
-  token: ""                  # empty = the plugin generates one and writes it here
-```
-
-Get a webhook like this: channel settings on Discord → Integrations → Webhooks → New Webhook →
-copy the URL. Anyone holding that URL can post to your channel, so treat it like a password.
+Both ends were tested on real servers: Paper 1.16.5 on Java 11, and Paper 1.21.10 on Java 21.
 
 ## Commands
 
-All of them require the `ticksentry.admin` permission (default: OP).
+You need to be an operator (or have the `ticksentry.admin` permission).
 
 | Command | What it does |
 | --- | --- |
-| `/lagwatch status` | current TPS, tick time, monitoring and cooldown state |
-| `/lagwatch report` | forces a scan and prints the result in chat |
-| `/lagwatch report discord` | the same, but also posts to the webhook (handy for checking the setup) |
-| `/lagwatch history` | recent incidents, including ones from before a restart |
-| `/lagwatch stats [days]` | summary: how many incidents, caused by what, at which hour (7 days by default) |
-| `/lagwatch reload` | reloads `config.yml` |
+| `/lagwatch status` | shows TPS and tick time right now |
+| `/lagwatch report` | checks the server immediately and lists the 5 worst chunks |
+| `/lagwatch report discord` | same, but also sends it to Discord (good for testing your webhook) |
+| `/lagwatch history` | shows past incidents, even from before a restart |
+| `/lagwatch stats` | shows a summary: how many incidents, what caused them, at what time of day |
+| `/lagwatch reload` | loads the settings file again |
 
-Aliases: `/ts`, `/ticksentry`.
+You can type `/ts` instead of `/lagwatch`.
 
-## Placeholders (require PlaceholderAPI)
+`/lagwatch stats` takes a number of days, for example `/lagwatch stats 30`. It uses 7 days if you
+do not give one.
 
-| Placeholder | Returns |
-| --- | --- |
-| `%ticksentry_tps%` | TPS, e.g. `19.9` |
-| `%ticksentry_mspt%` | average tick time in ms |
-| `%ticksentry_peak_ms%` | longest freeze in the sample window |
-| `%ticksentry_status%` | `OK` or `LAG` |
-| `%ticksentry_monitoring%` | `running` or `stopped` |
-| `%ticksentry_last_category%` | cause of the last incident |
-| `%ticksentry_incidents_24h%` | incidents in the last 24 hours |
+## Settings
 
-## Web panel
+The file is `plugins/TickSentry/config.yml`. After changing it, type `/lagwatch reload`.
 
-Set `dashboard.enabled: true` and restart. The console prints a ready address:
+```yaml
+monitor:
+  mspt-threshold-ms: 50      # a tick slower than this counts as a problem
+  sustained-seconds: 10      # how long the problem must last before you get an alert
+  scan-cooldown-seconds: 300 # wait this long before sending another alert
+  rolling-average-ticks: 100 # how many ticks are averaged together
+  recovery-alert: true       # send a message when the server is fine again
+  recovery-seconds: 15       # how long it must stay fine before that message
+
+discord:
+  enabled: true
+  webhook-url: ""            # paste your webhook link here
+  mention-role-id: ""        # optional: a role to ping, numbers only
+
+scan:
+  ignored-worlds: []         # worlds to skip, for example ['world_the_end']
+  top-chunks-count: 5        # how many bad chunks to list
+
+storage:
+  enabled: true              # save incidents to a file so they survive a restart
+  keep-days: 30              # delete anything older than this (0 = keep forever)
+
+dashboard:
+  enabled: false             # the web page
+  bind: "127.0.0.1"          # only this computer can open it
+  port: 8080
+  token: ""                  # leave empty, the plugin fills it in
+```
+
+### What the numbers mean
+
+**Tick time** (also called MSPT) is how long the server needs to do one round of work. It should
+finish within 50 ms. A healthy server takes about 5-25 ms. If it takes longer than 50 ms, the
+server cannot keep up and players feel it.
+
+**TPS** is the same thing seen from the other side: how many rounds fit into one second. 20 is
+perfect. Below 18 people start noticing.
+
+## Discord alerts
+
+You need a webhook. A webhook is just a link that lets the plugin post to one of your channels.
+
+1. In Discord, right-click your channel and pick **Edit Channel**.
+2. Go to **Integrations**, then **Webhooks**, then **New Webhook**.
+3. Click **Copy Webhook URL**.
+4. Paste it into `config.yml` under `webhook-url`, between the quotes.
+5. Type `/lagwatch reload`, then `/lagwatch report discord` to test it.
+
+A message should appear in your channel within a second. If nothing shows up, look at the server
+console - the plugin writes down what Discord answered.
+
+**Keep that link private.** Anyone who has it can post in your channel.
+
+## The web page
+
+Set `enabled: true` under `dashboard` and restart. The console will print a link:
 
 ```
 [TickSentry] Web panel: http://127.0.0.1:8080/?token=a15e51d7...
 ```
 
-Paste it into a browser. The panel shows TPS, tick time, longest freeze, player count, a chart of
-tick time over the last hour (with the alert threshold marked) and a table of recent incidents.
-It refreshes itself every 2 seconds.
+Open it in a browser. You get TPS, tick time, the number of players, a chart of the last hour, and
+a table of past incidents. It updates itself every 2 seconds.
 
-**Nothing needs hosting.** The panel is an HTTP server embedded in the plugin (`HttpServer` from
-the JDK) running on the same machine as the game server. There is no central service, no account
-and no cost - everyone who installs the plugin gets their own panel.
+**You do not have to host anything.** The page runs inside the plugin, on the same computer as
+your server. There is no website to sign up for and nothing to pay.
 
-### Security
+### Opening it from another computer
 
-Every request must present a token, either in the address (`?token=...`) or in an `X-Auth-Token`
-header. The token is generated at random on first start and saved to `config.yml`.
+By default only the computer running the server can open the page. This is on purpose: the
+connection is not encrypted, so the token could be stolen on the way.
 
-**The connection is plain HTTP, with no encryption.** That is why the panel listens on
-`127.0.0.1` by default, reachable only from the machine hosting the server. To reach it from
-another device there are two safe routes:
+The easy safe way is an SSH tunnel. Run this on your own computer:
 
-1. **An SSH tunnel** (simplest): `ssh -L 8080:127.0.0.1:8080 user@your-server`, then open
-   `http://127.0.0.1:8080` locally.
-2. **A reverse proxy with HTTPS** (nginx, Caddy) in front of the panel.
+```
+ssh -L 8080:127.0.0.1:8080 user@your-server
+```
 
-Setting `bind: "0.0.0.0"` exposes the panel to the network unencrypted - the token then travels
-in clear text and anyone in between can capture it. The plugin warns about this in the console.
+Then open `http://127.0.0.1:8080` as usual. If you know how to set up nginx or Caddy with HTTPS,
+that works too.
+
+Changing `bind` to `0.0.0.0` opens the page to everyone on the network **without encryption**.
+The plugin warns you in the console if you do this.
+
+## Placeholders
+
+These work if you have PlaceholderAPI installed:
+
+| Placeholder | Shows |
+| --- | --- |
+| `%ticksentry_tps%` | TPS, for example `19.9` |
+| `%ticksentry_mspt%` | tick time in ms |
+| `%ticksentry_peak_ms%` | the slowest tick recently |
+| `%ticksentry_status%` | `OK` or `LAG` |
+| `%ticksentry_monitoring%` | `running` or `stopped` |
+| `%ticksentry_last_category%` | what caused the last incident |
+| `%ticksentry_incidents_24h%` | incidents in the last day |
+
+## What it cannot do
+
+TickSentry looks at **what is inside your world**. It finds too many mobs, too many items, too
+many hoppers, and crowds of players.
+
+It **cannot** tell you that a badly written plugin is the problem, or that the lag comes from
+saving the world or generating new land. In those cases it says "No obvious source" and suggests
+you run [spark](https://spark.lucko.me/), which digs deeper.
+
+If spark is installed, TickSentry adds spark's own numbers to its alerts.
+
+The plugin also guesses how expensive things are. A hopper counts for more than a chest, a
+villager for more than a dropped item. These are sensible guesses, not measurements. If alerts
+feel too sensitive or too quiet on your server, change `mspt-threshold-ms` first.
 
 ## Trying it out
 
-A full step-by-step guide lives in [TESTING.md](TESTING.md) - from building the jar, through
-generating real lag with 2000 cows, to checking the panel and the Discord alert. It takes about
-15 minutes.
+There is a full walkthrough in [TESTING.md](TESTING.md). The short version:
 
-The short version: set `sustained-seconds: 3`, run `/lagwatch reload`, stand still and keep
-doubling cows with
-`/execute as @e[type=cow,distance=..10] at @s run summon minecraft:cow ~ ~ ~`.
-The alert should point at exactly the chunk you are standing in.
+1. Set `sustained-seconds: 3` and run `/lagwatch reload`.
+2. Stand somewhere and spawn a cow: `/summon minecraft:cow ~ ~ ~`
+3. Run this about 11 times - it doubles the cows each time:
+   ```
+   /execute as @e[type=cow,distance=..10] at @s run summon minecraft:cow ~ ~ ~
+   ```
+4. Wait a few seconds. The alert should point at the exact chunk you are standing in.
+5. Clean up with `/kill @e[type=minecraft:cow]` and `/kill @e[type=minecraft:item]`.
 
-## Known limitations (deliberate)
+Put `sustained-seconds` back to 10 when you are done.
 
-- There is no call-stack sampling like spark does. The plugin correlates high MSPT with anomalous
-  chunk contents, so it **will not** catch lag coming from a plugin, world saving or terrain
-  generation - in that case it reports the "No obvious source" category and suggests running spark.
-- The cost weights for entities and block entities (`HotspotAnalyzer`) are approximations, not
-  profiling results. They are tuned so that 40 hoppers outweigh 40 chests, and 200 dropped items
-  weigh less than 200 villagers.
+## Building it yourself
 
-## Layout
-
-```
-dev/poleszczuk/ticksentry
-├── TickSentryPlugin         wiring
-├── monitor/
-│   ├── TickMonitor          per-tick MSPT/TPS measurement and sustained-breach detection
-│   ├── ChunkHotspotScanner  reads chunks through Bukkit (main thread, spread across ticks)
-│   ├── ChunkStat            chunk snapshot, free of any Bukkit dependency
-│   ├── HotspotAnalyzer      weights, ranking and categorisation - all the logic, fully testable
-│   ├── LagCategory          the cause categories
-│   ├── LagEvent             one incident
-│   └── SparkBridge          optional data from spark (reflection)
-├── discord/
-│   ├── DiscordWebhookClient async delivery on its own thread
-│   └── EmbedBuilder         embed JSON without any library
-├── commands/LagWatchCommand
-├── config/ConfigManager
-├── placeholders/TickSentryExpansion  optional PlaceholderAPI placeholders
-├── util/Json                bare minimum for hand-rolled JSON
-├── web/
-│   ├── DashboardServer      JDK HttpServer, token auth, three endpoints
-│   ├── LiveSnapshot         state snapshot assembled on the main thread
-│   └── MsptHistory          ring buffer of chart samples
-└── storage/
-    ├── AlertStore           incident store interface
-    ├── SqliteAlertStore     disk storage, all I/O on a separate thread
-    ├── MemoryAlertStore     fallback when storage is off or the database fails
-    ├── StoredIncident       flattened incident (one database row)
-    └── IncidentStats        period summary: causes, spread across the day
+```bash
+./gradlew build
 ```
 
-The SQLite driver is not bundled into the jar - it is declared under `libraries` in `plugin.yml`,
-so Paper fetches it on first start. That keeps the jar small (~60 KB) and avoids version clashes
-with other plugins.
+You need JDK 21 to build, but the finished plugin runs on Java 11. The jar appears in
+`build/libs/`.
 
-Unit tests (`./gradlew test`) cover the chunk scoring logic, JSON building, statistics and the
-sample buffer - 34 tests, with no Bukkit mocking.
+The plugin adds nothing to your server except itself. The one library it uses (SQLite) is
+downloaded by Paper on the first start, so the jar stays small.
 
-## Where the thresholds come from
+## For developers
 
-The weights and thresholds in `HotspotAnalyzer` were calibrated on a running Paper 1.21.10 server:
+The code is split so that the interesting part can be tested without starting a server:
 
-- `MIN_INTERESTING_SCORE = 80` - at 25, an ordinary chunk holding a few dozen falling blocks
-  during terrain generation was labelled a "mob farm".
-- `FALLING_BLOCK`, `ARROW` and `SNOWBALL` carry reduced weights - they appear in bulk but briefly.
-- A player weighs 5.0, because they keep chunks loaded around them and generate network traffic.
+- `monitor/` - measuring ticks and scanning chunks. `HotspotAnalyzer` makes all the decisions
+  (which chunk is worst, what the cause is) and knows nothing about Minecraft, so plain unit tests
+  cover it.
+- `discord/` - building and sending the alert. Sending happens on its own thread, so the server
+  never waits for the network.
+- `storage/` - saving incidents to SQLite. All database work happens off the main thread.
+- `web/` - the dashboard. The web code never touches the Minecraft API; it reads snapshots that
+  the main thread prepares for it.
+- `commands/`, `config/`, `placeholders/`, `util/` - the rest.
 
-If alerts feel too eager or too quiet on your server, those are the first knobs to turn.
+Two things are worth knowing if you change the code. Reading chunks has to happen on the main
+thread, so the scan is spread over several ticks with a 3 ms budget each - otherwise the plugin
+would cause the very lag it looks for. And anything slow (network, database) must stay off the
+main thread.
+
+Run the tests with `./gradlew test`. There are 34 of them and none need a fake server.
 
 ## Licence
 
-MIT - see [LICENSE](LICENSE).
+MIT. Do what you like with it - see [LICENSE](LICENSE).
