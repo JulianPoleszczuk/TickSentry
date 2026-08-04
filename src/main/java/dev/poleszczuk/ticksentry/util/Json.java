@@ -12,6 +12,28 @@ public final class Json {
     }
 
     /**
+     * Reads one top-level string value out of a JSON object.
+     *
+     * <p>Deliberately not a parser. The only JSON the plugin ever reads is a GitHub release
+     * response, from which it wants a single field; pulling in a library, or writing a parser,
+     * to get one string would be out of proportion. Escaped quotes inside the value are not
+     * handled, because no version tag contains one.</p>
+     *
+     * @param json JSON text, may be {@code null}
+     * @param key  field name to look for
+     * @return the value, or {@code null} when the field is absent
+     */
+    public static String readString(String json, String key) {
+        if (json == null || key == null) {
+            return null;
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("\"" + java.util.regex.Pattern.quote(key) + "\"\\s*:\\s*\"([^\"]*)\"")
+                .matcher(json);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+
+    /**
      * Escapes text according to JSON rules.
      *
      * @param text input text, may be {@code null}

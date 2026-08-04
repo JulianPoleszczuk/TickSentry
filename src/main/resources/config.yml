@@ -46,6 +46,11 @@ discord:
   # Optional role id to ping on alert (digits only, without <@&>).
   mention-role-id: ""
 
+updates:
+  # Ask the GitHub releases page once at startup whether a newer TickSentry exists, and tell
+  # you in the console and in game. Nothing is ever downloaded or installed - you decide.
+  check: true
+
 profiler:
   # Measure how long every other plugin spends inside its event handlers, so an alert can name
   # a plugin instead of a chunk. This is the only way TickSentry can catch lag that is not

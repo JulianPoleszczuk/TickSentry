@@ -25,6 +25,7 @@ import dev.poleszczuk.ticksentry.storage.MemoryAlertStore;
 import dev.poleszczuk.ticksentry.storage.OffenderIndex;
 import dev.poleszczuk.ticksentry.storage.SqliteAlertStore;
 import dev.poleszczuk.ticksentry.storage.StoredIncident;
+import dev.poleszczuk.ticksentry.util.UpdateChecker;
 import dev.poleszczuk.ticksentry.web.DashboardServer;
 import dev.poleszczuk.ticksentry.web.LiveSnapshot;
 import dev.poleszczuk.ticksentry.web.MetricsSnapshot;
@@ -68,6 +69,9 @@ public final class TickSentryPlugin extends JavaPlugin {
 
     /** How many plugins get their own Prometheus time series. */
     private static final int METRICS_PLUGINS = 10;
+
+    /** GitHub repository the update check reads releases from. */
+    private static final String REPOSITORY = "JulianPoleszczuk/TickSentry";
 
     /** How often (in ticks) memory and the garbage collector are read (5 seconds). */
     private static final long MEMORY_POLL_TICKS = 20L * 5L;
@@ -131,6 +135,7 @@ public final class TickSentryPlugin extends JavaPlugin {
         }
 
         registerPlaceholders();
+        startUpdateCheck();
         startDashboard();
         startPluginProfiler();
         getServer().getScheduler().runTaskTimer(this, this::pollHealth, MEMORY_POLL_TICKS, MEMORY_POLL_TICKS);
@@ -198,6 +203,21 @@ public final class TickSentryPlugin extends JavaPlugin {
                 PROFILER_ROTATE_TICKS, PROFILER_ROTATE_TICKS);
         getServer().getScheduler().runTaskTimer(this, pluginProfiler::install,
                 PROFILER_INSTALL_TICKS, PROFILER_INSTALL_TICKS);
+    }
+
+    /**
+     * Asks GitHub whether a newer release exists.
+     *
+     * <p>A monitoring plugin quietly running a version with a fixed detection bug is worse than
+     * useless, and nobody re-reads a release page for a plugin that has been working.</p>
+     */
+    private void startUpdateCheck() {
+        if (!configManager.updateCheck()) {
+            return;
+        }
+        UpdateChecker checker = new UpdateChecker(this, REPOSITORY);
+        getServer().getPluginManager().registerEvents(checker, this);
+        checker.checkAsync();
     }
 
     /** Registers the placeholders if PlaceholderAPI is on the server. */

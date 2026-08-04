@@ -42,6 +42,8 @@ public final class ConfigManager {
     private volatile int storageKeepDays;
     private volatile int offenderDays;
 
+    private volatile boolean updateCheck;
+
     private volatile boolean profilerEnabled;
     private volatile int profilerWindowSeconds;
 
@@ -90,6 +92,8 @@ public final class ConfigManager {
         this.storageEnabled = cfg.getBoolean("storage.enabled", true);
         this.storageKeepDays = Math.max(0, cfg.getInt("storage.keep-days", 30));
         this.offenderDays = Math.min(365, Math.max(1, cfg.getInt("storage.offender-days", 7)));
+
+        this.updateCheck = cfg.getBoolean("updates.check", true);
 
         this.profilerEnabled = cfg.getBoolean("profiler.enabled", true);
         // Below ~5 s a window holds too few samples to mean anything; above 300 s the profiler
@@ -228,6 +232,11 @@ public final class ConfigManager {
     /** @return how many days back to look when deciding which chunks keep coming back */
     public int offenderDays() {
         return offenderDays;
+    }
+
+    /** @return whether to ask GitHub at startup for a newer release */
+    public boolean updateCheck() {
+        return updateCheck;
     }
 
     /** @return whether other plugins' event handlers should be timed */
