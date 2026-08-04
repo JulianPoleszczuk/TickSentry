@@ -15,6 +15,15 @@ public enum LagCategory {
     /** Many block entities, usually hoppers, droppers and sorting systems. */
     REDSTONE("Redstone / hoppers", "Lots of hoppers, droppers or furnaces"),
 
+    /** Several mob spawners running in one place - a grinder somebody left on. */
+    SPAWNERS("Mob spawners", "Several spawners running side by side"),
+
+    /** A line of minecarts, usually hopper carts under a farm. */
+    MINECARTS("Minecart contraption", "A lot of minecarts, usually hopper carts under a farm"),
+
+    /** New land being generated or streamed in, rather than anything sitting still. */
+    CHUNK_LOADING("Chunk loading", "New land is being generated or read from disk"),
+
     /** A crowd of players, for example spawn or an arena fight. */
     PLAYER_CLUSTER("Player crowd", "Many players inside a single chunk"),
 

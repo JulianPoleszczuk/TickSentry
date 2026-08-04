@@ -263,6 +263,10 @@ public final class DiscordWebhookClient {
             embed.field("Plugin", event.pluginNote(), false);
         }
 
+        if (event.chunkLoadNote() != null) {
+            embed.field("Chunk loading", event.chunkLoadNote(), false);
+        }
+
         if (event.memoryNote() != null) {
             embed.field("Memory", event.memoryNote(), false);
         }

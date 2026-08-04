@@ -176,7 +176,12 @@ public final class HotspotAnalyzer {
         }
 
         if (tileScore >= total * TILE_DOMINANCE_SHARE) {
-            return LagCategory.REDSTONE;
+            Map.Entry<String, Integer> dominantTile = stat.dominantTileType();
+            // A wall of spawners and a wall of hoppers both score as block entities, but they
+            // are completely different problems with completely different fixes.
+            return dominantTile != null && isSpawner(dominantTile.getKey())
+                    ? LagCategory.SPAWNERS
+                    : LagCategory.REDSTONE;
         }
 
         Map.Entry<String, Integer> dominant = stat.dominantEntityType();
@@ -191,6 +196,9 @@ public final class HotspotAnalyzer {
             }
             if ("PLAYER".equals(type)) {
                 return LagCategory.PLAYER_CLUSTER;
+            }
+            if (isMinecart(type)) {
+                return LagCategory.MINECARTS;
             }
             return LagCategory.MOB_FARM;
         }
@@ -234,6 +242,22 @@ public final class HotspotAnalyzer {
                         : "Check the redstone build (" + tp + "): " + dominantTile.getValue() + "x "
                         + friendly(dominantTile.getKey())
                         + ". Hoppers are worth reducing or replacing with water streams.";
+            case SPAWNERS:
+                return dominantTile == null
+                        ? "Check the spawners at this spot (" + tp + ")."
+                        : dominantTile.getValue() + " spawners in one chunk (" + tp
+                        + "). Each one keeps checking for room to spawn, whether or not anyone is "
+                        + "using the grinder. Ask the owner to switch some off, or break a few.";
+            case MINECARTS:
+                return dominantEntity == null
+                        ? "Check the minecarts at this spot (" + tp + ")."
+                        : dominantEntity.getValue() + "x " + friendly(dominantEntity.getKey()) + " at " + tp
+                        + ". Hopper carts are checked every tick even when empty - a water stream or "
+                        + "fewer carts would do the same job. Quick fix: "
+                        + killCommand(stat, dominantEntity.getKey());
+            case CHUNK_LOADING:
+                // The chunk load rate carries the advice, so nothing to add from the chunk itself.
+                return "This one is not about a single place - see the chunk loading note below.";
             case PLAYER_CLUSTER:
                 return "There are " + stat.playerCount()
                         + " players in this chunk - if that is spawn or an event, the lag is expected. Check: "
@@ -292,6 +316,24 @@ public final class HotspotAnalyzer {
      * @param type entity type name
      * @return whether the type is litter on the ground rather than a creature
      */
+    /**
+     * @param type block entity type name
+     * @return whether it is a mob spawner, under any of the names Bukkit has used for one
+     */
+    public static boolean isSpawner(String type) {
+        String upper = type.toUpperCase(Locale.ROOT);
+        return "SPAWNER".equals(upper) || "MOB_SPAWNER".equals(upper)
+                || "CREATURE_SPAWNER".equals(upper) || "TRIAL_SPAWNER".equals(upper);
+    }
+
+    /**
+     * @param type entity type name
+     * @return whether it is a minecart of any kind
+     */
+    public static boolean isMinecart(String type) {
+        return type.toUpperCase(Locale.ROOT).contains("MINECART");
+    }
+
     public static boolean isItemLike(String type) {
         String upper = type.toUpperCase(Locale.ROOT);
         return "ITEM".equals(upper) || "DROPPED_ITEM".equals(upper) || "EXPERIENCE_ORB".equals(upper);

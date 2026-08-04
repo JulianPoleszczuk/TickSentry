@@ -6,6 +6,7 @@ import dev.poleszczuk.ticksentry.discord.DiscordWebhookClient;
 import dev.poleszczuk.ticksentry.monitor.AdaptiveThreshold;
 import dev.poleszczuk.ticksentry.monitor.ChunkAttribution;
 import dev.poleszczuk.ticksentry.monitor.ChunkHotspotScanner;
+import dev.poleszczuk.ticksentry.monitor.ChunkLoadRate;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
 import dev.poleszczuk.ticksentry.monitor.ChunkVisitors;
 import dev.poleszczuk.ticksentry.monitor.LagCategory;
@@ -89,6 +90,7 @@ public final class TickSentryPlugin extends JavaPlugin {
     private MemoryWatcher memoryWatcher;
     private PluginProfiler pluginProfiler;
     private ChunkVisitors chunkVisitors;
+    private ChunkLoadRate chunkLoadRate;
     private RegionLookup regionLookup;
     private AutoRemediation remediation;
     private AdaptiveThreshold adaptiveThreshold;
@@ -108,9 +110,11 @@ public final class TickSentryPlugin extends JavaPlugin {
         this.pluginProfiler = new PluginProfiler(this);
         this.chunkVisitors = new ChunkVisitors();
         this.regionLookup = new RegionLookup(this);
+        this.chunkLoadRate = new ChunkLoadRate((int) (MEMORY_POLL_TICKS / 20L));
         this.scanner = new ChunkHotspotScanner(this, configManager, sparkBridge, memoryWatcher, pluginProfiler,
-                new ChunkAttribution(this, chunkVisitors, regionLookup, this::offenderIndex));
+                new ChunkAttribution(this, chunkVisitors, regionLookup, this::offenderIndex), chunkLoadRate);
         getServer().getPluginManager().registerEvents(chunkVisitors, this);
+        getServer().getPluginManager().registerEvents(chunkLoadRate, this);
         this.webhook = new DiscordWebhookClient(this, configManager, this::effectiveThresholdMs);
         this.remediation = new AutoRemediation(this, configManager::remedySettings, this::reportRemediation);
         this.adaptiveThreshold = new AdaptiveThreshold(configManager.adaptiveSettings(),
@@ -360,6 +364,9 @@ public final class TickSentryPlugin extends JavaPlugin {
         if (event.pluginNote() != null) {
             getLogger().warning("Plugin: " + event.pluginNote());
         }
+        if (event.chunkLoadNote() != null) {
+            getLogger().warning("Chunk loading: " + event.chunkLoadNote());
+        }
         getLogger().warning("Suggestion: " + event.suggestedAction());
         webhook.sendLagAlert(event);
         announceInGame(event);
@@ -473,6 +480,7 @@ public final class TickSentryPlugin extends JavaPlugin {
      */
     private void pollHealth() {
         memoryWatcher.poll();
+        chunkLoadRate.rotate();
         if (!tickMonitor.isInIncident()) {
             adaptiveThreshold.record(tickMonitor.averageMspt(), configManager.msptThresholdMs());
         }

@@ -45,6 +45,7 @@ public final class ChunkHotspotScanner {
     private final MemoryWatcher memory;
     private final PluginProfiler profiler;
     private final ChunkAttribution attribution;
+    private final ChunkLoadRate chunkLoadRate;
     private boolean scanning;
 
     /**
@@ -53,16 +54,19 @@ public final class ChunkHotspotScanner {
      * @param spark       optional source of extra statistics
      * @param memory      memory and garbage collector readings
      * @param profiler    per-plugin event handler timings
-     * @param attribution works out who the suspicious chunks belong to
+     * @param attribution   works out who the suspicious chunks belong to
+     * @param chunkLoadRate how fast chunks are coming into memory
      */
     public ChunkHotspotScanner(Plugin plugin, ConfigManager config, SparkBridge spark,
-                               MemoryWatcher memory, PluginProfiler profiler, ChunkAttribution attribution) {
+                               MemoryWatcher memory, PluginProfiler profiler, ChunkAttribution attribution,
+                               ChunkLoadRate chunkLoadRate) {
         this.plugin = plugin;
         this.config = config;
         this.spark = spark;
         this.memory = memory;
         this.profiler = profiler;
         this.attribution = attribution;
+        this.chunkLoadRate = chunkLoadRate;
     }
 
     /** @return {@code true} while a scan is in progress */
@@ -185,7 +189,7 @@ public final class ChunkHotspotScanner {
                     + " ticks (" + durationMs + " ms wall clock).");
             callback.accept(LagEvent.of(tps, mspt, peakMs, scannedChunks, totalEntities, top,
                     durationMs, manual, spark.summary(), memory.verdict(), config.costWeights(),
-                    profiler.report(config.profilerWindowSeconds())));
+                    profiler.report(config.profilerWindowSeconds()), chunkLoadRate.verdict()));
         }
     }
 }

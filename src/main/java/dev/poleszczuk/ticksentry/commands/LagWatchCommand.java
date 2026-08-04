@@ -210,6 +210,9 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         if (event.pluginNote() != null) {
             sender.sendMessage(ChatColor.YELLOW + event.pluginNote());
         }
+        if (event.chunkLoadNote() != null) {
+            sender.sendMessage(ChatColor.YELLOW + event.chunkLoadNote());
+        }
         if (event.memoryNote() != null) {
             sender.sendMessage(ChatColor.YELLOW + event.memoryNote());
         }
