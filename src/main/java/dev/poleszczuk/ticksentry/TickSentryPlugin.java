@@ -132,7 +132,7 @@ public final class TickSentryPlugin extends JavaPlugin {
                 chunkLoadRate, messages);
         getServer().getPluginManager().registerEvents(chunkVisitors, this);
         getServer().getPluginManager().registerEvents(chunkLoadRate, this);
-        this.webhook = new DiscordWebhookClient(this, configManager, this::effectiveThresholdMs);
+        this.webhook = new DiscordWebhookClient(this, configManager, messages, this::effectiveThresholdMs);
         this.remediation = new AutoRemediation(this, configManager::remedySettings, this::reportRemediation, messages);
         this.adaptiveThreshold = new AdaptiveThreshold(configManager.adaptiveSettings(),
                 (int) (MEMORY_POLL_TICKS / 20L));

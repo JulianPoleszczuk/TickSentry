@@ -1,6 +1,7 @@
 package dev.poleszczuk.ticksentry.discord;
 
 import dev.poleszczuk.ticksentry.config.ConfigManager;
+import dev.poleszczuk.ticksentry.config.MessageBundle;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
 import org.bukkit.plugin.Plugin;
@@ -41,6 +42,7 @@ public final class DiscordWebhookClient {
 
     private final Plugin plugin;
     private final ConfigManager config;
+    private final MessageBundle messages;
     private final DoubleSupplier threshold;
     private final HttpClient http;
     private final ExecutorService executor;
@@ -48,12 +50,15 @@ public final class DiscordWebhookClient {
     /**
      * @param plugin    plugin instance (logging)
      * @param config    source of the webhook address and mention settings
+     * @param messages  translatable labels; colour codes are stripped, Discord has no use for them
      * @param threshold the tick time currently counted as overloaded - read through a supplier
      *                  because the adaptive threshold moves while the server runs
      */
-    public DiscordWebhookClient(Plugin plugin, ConfigManager config, DoubleSupplier threshold) {
+    public DiscordWebhookClient(Plugin plugin, ConfigManager config, MessageBundle messages,
+                                DoubleSupplier threshold) {
         this.plugin = plugin;
         this.config = config;
+        this.messages = messages;
         this.threshold = threshold;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
@@ -91,12 +96,13 @@ public final class DiscordWebhookClient {
             return;
         }
         EmbedBuilder embed = new EmbedBuilder()
-                .title("Server is back to normal")
+                .title(messages.plain("discord.title-recovered"))
                 .color(COLOR_OK)
                 .timestamp(java.time.Instant.now())
-                .description("The lag is over - the server keeps up with the world again.")
-                .field("How long it lasted", humanDuration(durationSeconds), true)
-                .field("Right now", String.format(Locale.ROOT, "TPS: **%.1f** / 20%nTick time: **%.0f ms**", tps, mspt), true)
+                .description(messages.plain("discord.description-recovered"))
+                .field(messages.plain("discord.field.duration"), humanDuration(durationSeconds), true)
+                .field(messages.plain("discord.field.right-now"),
+                        String.format(Locale.ROOT, "TPS: **%.1f** / 20%nTick time: **%.0f ms**", tps, mspt), true)
                 .footer("TickSentry");
 
         String payload = "{\"username\":\"TickSentry\",\"allowed_mentions\":{\"parse\":[]},\"embeds\":["
@@ -118,7 +124,7 @@ public final class DiscordWebhookClient {
             return;
         }
         EmbedBuilder embed = new EmbedBuilder()
-                .title("Automatic clean-up")
+                .title(messages.plain("discord.title-remediation"))
                 .color(COLOR_NOTICE)
                 .timestamp(java.time.Instant.now())
                 .description(summary)
@@ -232,47 +238,49 @@ public final class DiscordWebhookClient {
         boolean healthy = event.manual() && event.averageMspt() <= threshold.getAsDouble();
 
         EmbedBuilder embed = new EmbedBuilder()
-                .title(healthy ? "Requested report: the server looks healthy" : title(event))
+                .title(healthy ? messages.plain("discord.title-healthy") : title(event))
                 .color(healthy ? COLOR_OK : color(event.tps()))
                 .timestamp(event.timestamp())
-                .footer("TickSentry - scanned " + event.loadedChunks() + " chunks, "
-                        + event.totalEntities() + " entities in total");
+                .footer(messages.plain("discord.footer",
+                        "chunks", String.valueOf(event.loadedChunks()),
+                        "entities", String.valueOf(event.totalEntities())));
 
         embed.description(healthy
-                ? "Checked on an admin's request. The server keeps up with the world."
-                : "The server cannot keep up with the world - players may feel the delay.\n"
-                + "**Likely cause: " + event.category().title() + "** ("
-                + event.category().description().toLowerCase(Locale.ROOT) + ")");
+                ? messages.plain("discord.description-healthy")
+                : messages.plain("discord.description",
+                        "cause", messages.plainCategoryTitle(event.category()),
+                        "explanation", messages.plainCategoryDescription(event.category())
+                                .toLowerCase(Locale.ROOT)));
 
-        embed.field("Server health", String.format(Locale.ROOT,
+        embed.field(messages.plain("discord.field.health"), String.format(Locale.ROOT,
                 "TPS: **%.1f** / 20%nTick time: **%.0f ms** (threshold %.0f ms)%nLongest freeze: **%.0f ms**",
                 event.tps(), event.averageMspt(), threshold.getAsDouble(), event.peakMs()), true);
 
         if (primary != null) {
-            embed.field("Where to look", describe(primary), true);
+            embed.field(messages.plain("discord.field.where"), describe(primary), true);
         }
 
         if (primary != null && primary.historyNote() != null) {
-            embed.field("Not the first time", "This chunk was already " + primary.historyNote()
-                    + ". Fixing it once would stop this coming back.", false);
+            embed.field(messages.plain("discord.field.repeat"),
+                    messages.plain("discord.repeat", "history", primary.historyNote()), false);
         }
 
-        embed.field("What to do", event.suggestedAction(), false);
+        embed.field(messages.plain("discord.field.what-to-do"), event.suggestedAction(), false);
 
         if (event.pluginNote() != null) {
-            embed.field("Plugin", event.pluginNote(), false);
+            embed.field(messages.plain("discord.field.plugin"), event.pluginNote(), false);
         }
 
         if (event.chunkLoadNote() != null) {
-            embed.field("Chunk loading", event.chunkLoadNote(), false);
+            embed.field(messages.plain("discord.field.chunk-loading"), event.chunkLoadNote(), false);
         }
 
         if (event.memoryNote() != null) {
-            embed.field("Memory", event.memoryNote(), false);
+            embed.field(messages.plain("discord.field.memory"), event.memoryNote(), false);
         }
 
         if (event.sparkSummary() != null) {
-            embed.field("More precise measurement", event.sparkSummary(), false);
+            embed.field(messages.plain("discord.field.spark"), event.sparkSummary(), false);
         }
 
         List<ChunkStat> others = event.topChunks().stream().skip(1).limit(EXTRA_CHUNKS_SHOWN).collect(Collectors.toList());
@@ -283,14 +291,14 @@ public final class DiscordWebhookClient {
                         .append(" (").append(stat.entityCount()).append(" entities, ")
                         .append(stat.tileEntityCount()).append(" block entities)\n");
             }
-            embed.field("Other suspicious places", list.toString(), false);
+            embed.field(messages.plain("discord.field.others"), list.toString(), false);
         }
 
         return embed;
     }
 
-    private static String title(LagEvent event) {
-        return event.manual() ? "Requested report: the server is lagging" : "Heads up: the server is lagging";
+    private String title(LagEvent event) {
+        return messages.plain(event.manual() ? "discord.title-requested" : "discord.title-alert");
     }
 
     private static int color(double tps) {

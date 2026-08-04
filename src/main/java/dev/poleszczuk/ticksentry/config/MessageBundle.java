@@ -108,6 +108,37 @@ public final class MessageBundle implements Messages {
     }
 
     /**
+     * Looks up a message with every colour code removed.
+     *
+     * <p>Discord has no idea what a Minecraft colour code is - it would print the section signs
+     * as literal characters. Any {@code &amp;} codes a translator leaves in a shared key are
+     * stripped here rather than being forbidden, so the same key can serve both places.</p>
+     *
+     * @param key          dotted key
+     * @param replacements alternating placeholder names and values
+     * @return the finished line, plain text
+     */
+    public String plain(String key, String... replacements) {
+        return ChatColor.stripColor(get(key, replacements));
+    }
+
+    /**
+     * @param category lag category
+     * @return its display name with no colour codes, for Discord and the console
+     */
+    public String plainCategoryTitle(LagCategory category) {
+        return ChatColor.stripColor(categoryTitle(category));
+    }
+
+    /**
+     * @param category lag category
+     * @return its explanation with no colour codes, for Discord and the console
+     */
+    public String plainCategoryDescription(LagCategory category) {
+        return ChatColor.stripColor(categoryDescription(category));
+    }
+
+    /**
      * @param key dotted key
      * @return whether the message exists and is not blank
      */

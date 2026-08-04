@@ -60,10 +60,21 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         this.plugin = plugin;
     }
 
+    /**
+     * Shorthand for a line of translatable text.
+     *
+     * @param key          dotted key from {@code messages.yml}
+     * @param replacements alternating placeholder names and values
+     * @return the finished line
+     */
+    private String msg(String key, String... replacements) {
+        return plugin.messages().get(key, replacements);
+    }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission(PERMISSION)) {
-            sender.sendMessage(ChatColor.RED + "You do not have permission.");
+            sender.sendMessage(msg("command.no-permission"));
             return true;
         }
 
@@ -92,8 +103,7 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                 reload(sender);
                 break;
             default:
-                sender.sendMessage(ChatColor.RED + "Usage: /" + label
-                        + " <status|report|plugins|history|offenders|stats|reload>");
+                sender.sendMessage(msg("command.usage", "label", label));
                 break;
         }
         return true;
@@ -105,72 +115,75 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         double mspt = monitor.averageMspt();
         double threshold = monitor.thresholdMs();
 
-        header(sender, "Status");
-        sender.sendMessage(ChatColor.GRAY + "Monitoring: " + (monitor.isRunning()
-                ? ChatColor.GREEN + "running" : ChatColor.RED + "stopped"));
-        sender.sendMessage(ChatColor.GRAY + "TPS: " + healthColor(monitor.tps() >= 19.0D, monitor.tps() >= 17.0D)
-                + String.format(Locale.ROOT, "%.2f", monitor.tps()) + ChatColor.DARK_GRAY + " / 20");
-        sender.sendMessage(ChatColor.GRAY + "Tick time: " + healthColor(mspt <= threshold * 0.6D, mspt <= threshold)
-                + String.format(Locale.ROOT, "%.1f ms", mspt)
-                + ChatColor.DARK_GRAY + " (threshold: " + String.format(Locale.ROOT, "%.0f ms", threshold) + ")");
-        sender.sendMessage(ChatColor.GRAY + "Longest freeze in window: " + ChatColor.WHITE
-                + String.format(Locale.ROOT, "%.0f ms", monitor.peakIntervalMs()));
+        header(sender, msg("command.section.status"));
+        sender.sendMessage(msg("status.monitoring", "state",
+                msg(monitor.isRunning() ? "status.monitoring-running" : "status.monitoring-stopped")));
+        sender.sendMessage(msg("status.tps",
+                "colour", healthColor(monitor.tps() >= 19.0D, monitor.tps() >= 17.0D).toString(),
+                "tps", String.format(Locale.ROOT, "%.2f", monitor.tps())));
+        sender.sendMessage(msg("status.mspt",
+                "colour", healthColor(mspt <= threshold * 0.6D, mspt <= threshold).toString(),
+                "mspt", String.format(Locale.ROOT, "%.1f", mspt),
+                "threshold", String.format(Locale.ROOT, "%.0f", threshold)));
+        sender.sendMessage(msg("status.peak",
+                "peak", String.format(Locale.ROOT, "%.0f", monitor.peakIntervalMs())));
 
         AdaptiveThreshold adaptive = plugin.adaptiveThreshold();
         if (plugin.configManager().adaptiveSettings().enabled()) {
-            sender.sendMessage(ChatColor.GRAY + "Threshold: " + ChatColor.WHITE
-                    + (adaptive.isReady()
-                    ? String.format(Locale.ROOT, "adaptive - this server normally runs at %.1f ms",
-                            adaptive.baseline())
-                    : "adaptive - still learning (" + adaptive.sampleCount() + "/"
-                      + AdaptiveThreshold.MIN_SAMPLES + " samples, using the fixed value)"));
+            sender.sendMessage(adaptive.isReady()
+                    ? msg("status.adaptive-ready", "baseline",
+                            String.format(Locale.ROOT, "%.1f", adaptive.baseline()))
+                    : msg("status.adaptive-learning",
+                            "have", String.valueOf(adaptive.sampleCount()),
+                            "need", String.valueOf(AdaptiveThreshold.MIN_SAMPLES)));
         }
 
         long breach = monitor.currentBreachSeconds();
         if (breach > 0L) {
-            sender.sendMessage(ChatColor.RED + "Threshold exceeded for " + breach + " s (alert after "
-                    + plugin.configManager().sustainedSeconds() + " s).");
+            sender.sendMessage(msg("status.breach",
+                    "seconds", String.valueOf(breach),
+                    "after", String.valueOf(plugin.configManager().sustainedSeconds())));
         }
         long cooldown = monitor.alertCooldownRemainingSeconds();
         if (cooldown > 0L) {
-            sender.sendMessage(ChatColor.GRAY + "Next alert possible in " + ChatColor.WHITE + cooldown + " s"
-                    + ChatColor.GRAY + ".");
+            sender.sendMessage(msg("status.cooldown", "seconds", String.valueOf(cooldown)));
         }
-        sender.sendMessage(ChatColor.GRAY + "Discord: " + (plugin.configManager().discordEnabled()
-                ? ChatColor.GREEN + "configured" : ChatColor.YELLOW + "disabled or webhook missing"));
+        sender.sendMessage(msg("status.discord", "state",
+                msg(plugin.configManager().discordEnabled()
+                        ? "status.discord-configured" : "status.discord-missing")));
 
         String spark = plugin.sparkBridge().summary();
-        sender.sendMessage(ChatColor.GRAY + "Spark: " + (spark == null
-                ? ChatColor.DARK_GRAY + "unavailable (using built-in measurements)"
-                : ChatColor.WHITE + spark));
+        sender.sendMessage(spark == null
+                ? msg("status.spark-missing")
+                : msg("status.spark", "spark", spark));
+
         RemedySettings remedy = plugin.configManager().remedySettings();
         if (!remedy.enabled()) {
-            sender.sendMessage(ChatColor.GRAY + "Automatic clean-up: " + ChatColor.DARK_GRAY
-                    + "off (the plugin only looks, it changes nothing)");
+            sender.sendMessage(msg("status.remedy-off"));
         } else {
             long remedyCooldown = plugin.remediation().cooldownRemainingSeconds();
-            sender.sendMessage(ChatColor.GRAY + "Automatic clean-up: "
-                    + (remedy.dryRun() ? ChatColor.YELLOW + "dry-run (reports only)" : ChatColor.RED + "ACTIVE")
-                    + (remedyCooldown > 0L ? ChatColor.DARK_GRAY + " - next in " + remedyCooldown + " s" : ""));
+            sender.sendMessage(msg(remedy.dryRun() ? "status.remedy-dry-run" : "status.remedy-active",
+                    "next", remedyCooldown > 0L
+                            ? msg("status.remedy-next", "seconds", String.valueOf(remedyCooldown)) : ""));
         }
 
-        sender.sendMessage(ChatColor.GRAY + "Land protection: " + (plugin.regionLookup().isAvailable()
-                ? ChatColor.GREEN + "hooked - alerts can name an owner"
-                : ChatColor.DARK_GRAY + "none found (falling back to who was last seen there)"));
+        sender.sendMessage(msg(plugin.regionLookup().isAvailable()
+                ? "status.protection-hooked" : "status.protection-missing"));
 
         String memory = plugin.memoryWatcher().describe();
         if (memory != null) {
-            sender.sendMessage(ChatColor.GRAY + "Memory: " + ChatColor.WHITE + memory);
+            sender.sendMessage(msg("status.memory", "memory", memory));
         }
-        sender.sendMessage(ChatColor.GRAY + "History: " + ChatColor.WHITE + plugin.alertStore().describe()
-                + ChatColor.DARK_GRAY + " (" + Plural.incidents(plugin.incidentsLast24h()) + " in the last 24 h)");
+        sender.sendMessage(msg("status.history",
+                "store", plugin.alertStore().describe(),
+                "recent", Plural.incidents(plugin.incidentsLast24h())));
     }
 
     /** Forces a scan and prints the result in chat; optionally sends it to Discord too. */
     private void showReport(CommandSender sender, boolean alsoDiscord) {
         boolean started = plugin.runScan(true, event -> printReport(sender, event, alsoDiscord));
         if (!started) {
-            sender.sendMessage(ChatColor.YELLOW + "A scan is already running - the result will show up shortly.");
+            sender.sendMessage(msg("report.already-running"));
         }
     }
 
@@ -178,88 +191,93 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
     private void printReport(CommandSender sender, LagEvent event, boolean alsoDiscord) {
         plugin.recordManual(event);
 
-        header(sender, "Report");
-        sender.sendMessage(ChatColor.GRAY + "TPS " + ChatColor.WHITE + String.format(Locale.ROOT, "%.2f", event.tps())
-                + ChatColor.GRAY + ", tick time " + ChatColor.WHITE + String.format(Locale.ROOT, "%.1f ms", event.averageMspt())
-                + ChatColor.GRAY + ", scanned " + ChatColor.WHITE + event.loadedChunks() + ChatColor.GRAY
-                + " chunks (" + event.totalEntities() + " entities).");
+        header(sender, msg("command.section.report"));
+        sender.sendMessage(msg("report.summary",
+                "tps", String.format(Locale.ROOT, "%.2f", event.tps()),
+                "mspt", String.format(Locale.ROOT, "%.1f", event.averageMspt()),
+                "chunks", String.valueOf(event.loadedChunks()),
+                "entities", String.valueOf(event.totalEntities())));
 
+        String cause = plugin.messages().categoryTitle(event.category());
         if (event.topChunks().isEmpty()) {
-            sender.sendMessage(ChatColor.GREEN + "No chunk stands out - the game world looks calm.");
+            sender.sendMessage(msg("report.calm"));
             // The world is fine but something else was not, so the advice still has to reach the admin.
             if (event.category() != LagCategory.UNKNOWN) {
-                sender.sendMessage(ChatColor.GRAY + "Likely cause: " + ChatColor.AQUA + event.category().title());
-                sender.sendMessage(ChatColor.YELLOW + event.suggestedAction());
+                sender.sendMessage(msg("report.cause", "cause", cause));
+                sender.sendMessage(msg("report.advice", "advice", event.suggestedAction()));
             }
         } else {
-            sender.sendMessage(ChatColor.GRAY + "Likely cause: " + ChatColor.AQUA + event.category().title());
+            sender.sendMessage(msg("report.cause", "cause", cause));
             int index = 1;
             for (ChunkStat stat : event.topChunks()) {
-                sender.sendMessage(ChatColor.DARK_GRAY + " " + index++ + ". " + ChatColor.WHITE + stat.prettyLocation()
-                        + ChatColor.GRAY + " - " + stat.entityCount() + " entities, "
-                        + stat.tileEntityCount() + " block entities" + describeDominant(stat));
+                sender.sendMessage(msg("report.chunk",
+                        "index", String.valueOf(index++),
+                        "location", stat.prettyLocation(),
+                        "entities", String.valueOf(stat.entityCount()),
+                        "tiles", String.valueOf(stat.tileEntityCount()),
+                        "dominant", describeDominant(stat)));
                 if (stat.attribution() != null) {
-                    sender.sendMessage(ChatColor.DARK_GRAY + "    " + stat.attribution());
+                    sender.sendMessage(msg("report.chunk-owner", "attribution", stat.attribution()));
                 }
                 if (stat.historyNote() != null) {
-                    sender.sendMessage(ChatColor.YELLOW + "    repeat offender: " + stat.historyNote());
+                    sender.sendMessage(msg("report.chunk-history", "history", stat.historyNote()));
                 }
             }
-            sender.sendMessage(ChatColor.YELLOW + event.suggestedAction());
+            sender.sendMessage(msg("report.advice", "advice", event.suggestedAction()));
         }
         if (event.pluginNote() != null) {
-            sender.sendMessage(ChatColor.YELLOW + event.pluginNote());
+            sender.sendMessage(msg("report.note", "note", event.pluginNote()));
         }
         if (event.chunkLoadNote() != null) {
-            sender.sendMessage(ChatColor.YELLOW + event.chunkLoadNote());
+            sender.sendMessage(msg("report.note", "note", event.chunkLoadNote()));
         }
         if (event.memoryNote() != null) {
-            sender.sendMessage(ChatColor.YELLOW + event.memoryNote());
+            sender.sendMessage(msg("report.note", "note", event.memoryNote()));
         }
         if (event.sparkSummary() != null) {
-            sender.sendMessage(ChatColor.DARK_GRAY + event.sparkSummary());
+            sender.sendMessage(msg("report.spark", "spark", event.sparkSummary()));
         }
 
         if (alsoDiscord) {
             if (plugin.configManager().discordEnabled()) {
                 plugin.webhook().sendLagAlert(event);
-                sender.sendMessage(ChatColor.GRAY + "Report also sent to Discord.");
+                sender.sendMessage(msg("report.sent-to-discord"));
             } else {
-                sender.sendMessage(ChatColor.RED + "Discord is disabled or the webhook URL is empty.");
+                sender.sendMessage(msg("report.discord-unconfigured"));
             }
         }
     }
 
     /** Prints which plugins spent the most time in their event handlers recently. */
     private void showPlugins(CommandSender sender) {
-        header(sender, "Plugins");
+        header(sender, msg("command.section.plugins"));
         PluginProfiler profiler = plugin.pluginProfiler();
         if (!profiler.isRunning()) {
-            sender.sendMessage(ChatColor.YELLOW + "Profiling is off - set profiler.enabled to true in config.yml.");
+            sender.sendMessage(msg("plugins.disabled"));
             return;
         }
 
         PluginReport report = profiler.report(plugin.configManager().profilerWindowSeconds());
         if (report.isEmpty()) {
-            sender.sendMessage(ChatColor.GREEN + "Nothing measured yet - give it a few seconds.");
+            sender.sendMessage(msg("plugins.nothing-measured"));
         } else {
-            sender.sendMessage(ChatColor.GRAY + "Event handler time over the last "
-                    + String.format(Locale.ROOT, "%.0f s", report.windowSeconds())
-                    + ChatColor.DARK_GRAY + " (" + profiler.wrappedListeners() + " handlers watched)");
+            sender.sendMessage(msg("plugins.window",
+                    "seconds", String.format(Locale.ROOT, "%.0f", report.windowSeconds()),
+                    "handlers", String.valueOf(profiler.wrappedListeners())));
             int index = 1;
             for (PluginTiming timing : report.top(PLUGINS_SHOWN)) {
                 double share = timing.share(report.windowNanos());
-                sender.sendMessage(ChatColor.DARK_GRAY + " " + index++ + ". "
-                        + healthColor(share < 0.10D, share < PluginReport.SIGNIFICANT_SHARE)
-                        + timing.pluginName() + ChatColor.GRAY + " - "
-                        + String.format(Locale.ROOT, "%.0f ms (%.0f%%)", timing.totalMs(), share * 100.0D)
-                        + (timing.worstEvent() == null ? "" : ChatColor.DARK_GRAY + " " + timing.worstEvent()));
+                sender.sendMessage(msg("plugins.entry",
+                        "index", String.valueOf(index++),
+                        "colour", healthColor(share < 0.10D, share < PluginReport.SIGNIFICANT_SHARE).toString(),
+                        "plugin", timing.pluginName(),
+                        "ms", String.format(Locale.ROOT, "%.0f", timing.totalMs()),
+                        "share", String.format(Locale.ROOT, "%.0f", share * 100.0D),
+                        "event", timing.worstEvent() == null ? "" : timing.worstEvent()));
             }
-            if (report.explainsLag()) {
-                sender.sendMessage(ChatColor.YELLOW + report.suggestion());
-            } else {
-                sender.sendMessage(ChatColor.GREEN + "No plugin stands out - none of them is holding the tick.");
-            }
+            sender.sendMessage(report.explainsLag()
+                    ? msg("report.advice", "advice", report.suggestion(plugin.messages()))
+                    : msg("plugins.all-clear"));
         }
 
         // Bukkit gives no way to time scheduled tasks from the outside, so this is a count only.
@@ -269,29 +287,31 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                 .limit(PLUGINS_SHOWN)
                 .collect(Collectors.toList());
         if (!tasks.isEmpty()) {
-            sender.sendMessage(ChatColor.GRAY + "Pending scheduler tasks: " + ChatColor.DARK_GRAY
-                    + tasks.stream().map(entry -> entry.getKey() + " " + entry.getValue())
-                    .collect(Collectors.joining(", ")));
+            sender.sendMessage(msg("plugins.pending-tasks", "tasks",
+                    tasks.stream().map(entry -> entry.getKey() + " " + entry.getValue())
+                            .collect(Collectors.joining(", "))));
         }
     }
 
     /** Prints recent incidents; with SQLite storage this includes ones from before a restart. */
     private void showHistory(CommandSender sender) {
         plugin.alertStore().recent(HISTORY_SHOWN, incidents -> {
-            header(sender, "History");
+            header(sender, msg("command.section.history"));
             if (incidents.isEmpty()) {
-                sender.sendMessage(ChatColor.GREEN + "No incidents recorded yet.");
+                sender.sendMessage(msg("history.empty"));
                 return;
             }
             for (StoredIncident incident : incidents) {
                 boolean today = Duration.between(incident.timestamp(), Instant.now()).toHours() < 24L;
                 DateTimeFormatter format = today ? TIME : DATE_TIME;
-                sender.sendMessage(ChatColor.DARK_GRAY + format.format(incident.timestamp()) + ChatColor.GRAY
-                        + " (" + ago(incident.timestamp()) + " ago) " + ChatColor.WHITE
-                        + String.format(Locale.ROOT, "%.0f ms", incident.mspt())
-                        + ChatColor.GRAY + " - " + incident.category().title()
-                        + (incident.world() == null ? "" : ChatColor.DARK_GRAY + " @ " + incident.prettyLocation())
-                        + (incident.manual() ? ChatColor.DARK_GRAY + " [manual]" : ""));
+                sender.sendMessage(msg("history.entry",
+                        "time", format.format(incident.timestamp()),
+                        "ago", ago(incident.timestamp()),
+                        "mspt", String.format(Locale.ROOT, "%.0f", incident.mspt()),
+                        "cause", plugin.messages().categoryTitle(incident.category()),
+                        "location", incident.world() == null
+                                ? "" : msg("history.at", "location", incident.prettyLocation()),
+                        "manual", incident.manual() ? msg("history.manual") : ""));
             }
         });
     }
@@ -304,24 +324,28 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
      */
     private void showOffenders(CommandSender sender, int days) {
         plugin.alertStore().offenders(days, OFFENDERS_SHOWN, offenders -> {
-            header(sender, "Repeat offenders (" + days + " days)");
+            header(sender, msg("command.section.offenders", "days", String.valueOf(days)));
             if (offenders.isEmpty()) {
-                sender.sendMessage(ChatColor.GREEN
-                        + "No chunk has been behind more than one incident - nothing here is a standing problem.");
+                sender.sendMessage(msg("offenders.empty"));
                 return;
             }
             int index = 1;
             for (RepeatOffender offender : offenders) {
-                sender.sendMessage(ChatColor.DARK_GRAY + " " + index++ + ". "
-                        + (offender.isChronic() ? ChatColor.RED : ChatColor.YELLOW) + offender.prettyLocation()
-                        + ChatColor.GRAY + " - " + offender.describe()
-                        + ChatColor.DARK_GRAY + ", last " + ago(offender.lastSeen()) + " ago");
+                sender.sendMessage(msg("offenders.entry",
+                        "index", String.valueOf(index++),
+                        "colour", (offender.isChronic() ? ChatColor.RED : ChatColor.YELLOW).toString(),
+                        "location", offender.prettyLocation(),
+                        "hits", String.valueOf(offender.hits()),
+                        "total", String.valueOf(offender.outOf()),
+                        "worst", String.format(Locale.ROOT, "%.0f", offender.worstMspt()),
+                        "ago", ago(offender.lastSeen())));
             }
             RepeatOffender worst = offenders.get(0);
             if (worst.isChronic()) {
-                sender.sendMessage(ChatColor.YELLOW + "Start with " + worst.prettyLocation()
-                        + " - fixing that one place would have prevented most of these. /tp "
-                        + worst.blockX() + " ~ " + worst.blockZ());
+                sender.sendMessage(msg("offenders.start-here",
+                        "location", worst.prettyLocation(),
+                        "x", String.valueOf(worst.blockX()),
+                        "z", String.valueOf(worst.blockZ())));
             }
         });
     }
@@ -329,38 +353,40 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
     /** Prints an incident summary: how many, caused by what, and at which hour most often. */
     private void showStats(CommandSender sender, int days) {
         plugin.alertStore().stats(days, stats -> {
-            header(sender, "Stats (" + days + " days)");
+            header(sender, msg("command.section.stats", "days", String.valueOf(days)));
             if (stats.total() == 0) {
-                sender.sendMessage(ChatColor.GREEN + "No incidents in this period - the server held up well.");
+                sender.sendMessage(msg("stats.empty"));
                 return;
             }
 
-            sender.sendMessage(ChatColor.GRAY + "Recorded: " + ChatColor.WHITE + Plural.incidents(stats.total()));
+            sender.sendMessage(msg("stats.recorded", "count", Plural.incidents(stats.total())));
 
             LagCategory dominant = stats.dominantCategory();
             if (dominant != null) {
-                sender.sendMessage(ChatColor.GRAY + "Most common cause: " + ChatColor.AQUA + dominant.title()
-                        + ChatColor.DARK_GRAY + " (" + stats.byCategory().getOrDefault(dominant, 0) + "x)");
+                sender.sendMessage(msg("stats.dominant-cause",
+                        "cause", plugin.messages().categoryTitle(dominant),
+                        "count", String.valueOf(stats.byCategory().getOrDefault(dominant, 0))));
             }
 
             int worstHour = stats.worstHour();
             if (worstHour >= 0) {
-                sender.sendMessage(ChatColor.GRAY + "Worst time of day: " + ChatColor.WHITE
-                        + String.format("%02d:00-%02d:59", worstHour, worstHour)
-                        + ChatColor.DARK_GRAY + " (" + Plural.incidents(stats.byHour()[worstHour]) + ")");
+                sender.sendMessage(msg("stats.worst-hour",
+                        "hour", String.format(Locale.ROOT, "%02d", worstHour),
+                        "count", Plural.incidents(stats.byHour()[worstHour])));
             }
 
             StoredIncident worst = stats.worst();
             if (worst != null) {
-                sender.sendMessage(ChatColor.GRAY + "Worst moment: " + ChatColor.WHITE
-                        + String.format(Locale.ROOT, "%.0f ms", worst.mspt()) + ChatColor.DARK_GRAY
-                        + " " + DATE_TIME.format(worst.timestamp()) + " - " + worst.prettyLocation());
+                sender.sendMessage(msg("stats.worst-moment",
+                        "mspt", String.format(Locale.ROOT, "%.0f", worst.mspt()),
+                        "when", DATE_TIME.format(worst.timestamp()),
+                        "location", worst.prettyLocation()));
             }
 
             List<String> histogram = stats.hourHistogram();
             if (!histogram.isEmpty()) {
-                sender.sendMessage(ChatColor.GRAY + "Spread across the day:");
-                histogram.forEach(line -> sender.sendMessage(ChatColor.DARK_GRAY + " " + line));
+                sender.sendMessage(msg("stats.histogram-header"));
+                histogram.forEach(line -> sender.sendMessage(msg("stats.histogram-row", "row", line)));
             }
         });
     }
@@ -385,26 +411,26 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         // The baseline window length is a setting, so a reload starts it over rather than
         // mixing samples taken under two different window sizes.
         plugin.adaptiveThreshold().reconfigure(plugin.configManager().adaptiveSettings());
-        header(sender, "Reload");
-        sender.sendMessage(ChatColor.GREEN + "Configuration reloaded. Threshold: "
-                + String.format(Locale.ROOT, "%.0f ms", plugin.configManager().msptThresholdMs())
-                + " for " + plugin.configManager().sustainedSeconds() + " s."
-                + (plugin.configManager().adaptiveSettings().enabled()
-                ? " The adaptive threshold is relearning this server's normal tick time." : ""));
+        header(sender, msg("command.section.reload"));
+        sender.sendMessage(msg("reload.done",
+                "threshold", String.format(Locale.ROOT, "%.0f", plugin.configManager().msptThresholdMs()),
+                "seconds", String.valueOf(plugin.configManager().sustainedSeconds()),
+                "adaptive", plugin.configManager().adaptiveSettings().enabled()
+                        ? msg("reload.adaptive-relearning") : ""));
     }
 
-    private static String describeDominant(ChunkStat stat) {
+    private String describeDominant(ChunkStat stat) {
         var dominant = stat.dominantEntityType();
         if (dominant == null || dominant.getValue() < 10) {
             return "";
         }
-        return ChatColor.DARK_GRAY + " (mostly " + dominant.getValue() + "x "
-                + dominant.getKey().toLowerCase(Locale.ROOT).replace('_', ' ') + ")";
+        return msg("report.chunk-dominant",
+                "count", String.valueOf(dominant.getValue()),
+                "type", dominant.getKey().toLowerCase(Locale.ROOT).replace('_', ' '));
     }
 
-    private static void header(CommandSender sender, String section) {
-        sender.sendMessage(ChatColor.DARK_GRAY + "--- " + ChatColor.AQUA + "TickSentry " + ChatColor.WHITE + section
-                + ChatColor.DARK_GRAY + " ---");
+    private void header(CommandSender sender, String section) {
+        sender.sendMessage(msg("command.header", "section", section));
     }
 
     private static ChatColor healthColor(boolean good, boolean acceptable) {

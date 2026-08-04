@@ -68,14 +68,20 @@ public final class TickSentryExpansion extends PlaceholderExpansion {
             case "peak_ms":
                 return String.format(Locale.ROOT, "%.0f", plugin.tickMonitor().peakIntervalMs());
             case "status":
-                return plugin.tickMonitor().isInIncident() ? "LAG" : "OK";
+                // These end up on scoreboards and in chat formats, so they are translatable
+                // like everything else a player can see.
+                return plugin.messages().get(plugin.tickMonitor().isInIncident()
+                        ? "placeholder.status-lag" : "placeholder.status-ok");
             case "monitoring":
-                return plugin.tickMonitor().isRunning() ? "running" : "stopped";
+                return plugin.messages().get(plugin.tickMonitor().isRunning()
+                        ? "placeholder.monitoring-running" : "placeholder.monitoring-stopped");
             case "incidents_24h":
                 return String.valueOf(plugin.incidentsLast24h());
             case "last_category":
                 LagCategory category = plugin.lastCategory();
-                return category == null ? "none" : category.title();
+                return category == null
+                        ? plugin.messages().get("placeholder.no-category")
+                        : plugin.messages().categoryTitle(category);
             default:
                 return null;
         }

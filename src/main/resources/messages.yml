@@ -10,6 +10,157 @@
 # A key you delete falls back to the English copy inside the jar, so an incomplete file is
 # safe. New keys added by an update behave the same way.
 
+# The Discord alert. Colour codes are stripped from these - Discord would print the section
+# signs as literal characters - but Discord's own **bold** and _italics_ work fine.
+discord:
+  title-alert: "Heads up: the server is lagging"
+  title-requested: "Requested report: the server is lagging"
+  title-healthy: "Requested report: the server looks healthy"
+  title-recovered: "Server is back to normal"
+  title-remediation: "Automatic clean-up"
+  # {cause} {explanation}
+  description: "The server cannot keep up with the world - players may feel the delay.\n**Likely cause: {cause}** ({explanation})"
+  description-healthy: "Checked on an admin's request. The server keeps up with the world."
+  description-recovered: "The lag is over - the server keeps up with the world again."
+  # {chunks} {entities}
+  footer: "TickSentry - scanned {chunks} chunks, {entities} entities in total"
+  # {history}
+  repeat: "This chunk was already {history}. Fixing it once would stop this coming back."
+  field:
+    health: "Server health"
+    where: "Where to look"
+    repeat: "Not the first time"
+    what-to-do: "What to do"
+    plugin: "Plugin"
+    chunk-loading: "Chunk loading"
+    memory: "Memory"
+    spark: "More precise measurement"
+    others: "Other suspicious places"
+    duration: "How long it lasted"
+    right-now: "Right now"
+
+# Replies to /lagwatch. {colour} placeholders receive a colour the plugin picked from the
+# numbers (green when healthy, red when not) - keep them where the value starts.
+command:
+  no-permission: "&cYou do not have permission."
+  usage: "&cUsage: /{label} <status|report|plugins|history|offenders|stats|reload>"
+  header: "&8--- &bTickSentry &f{section} &8---"
+  section:
+    status: "Status"
+    report: "Report"
+    plugins: "Plugins"
+    history: "History"
+    # {days}
+    offenders: "Repeat offenders ({days} days)"
+    stats: "Stats ({days} days)"
+    reload: "Reload"
+
+status:
+  monitoring: "&7Monitoring: {state}"
+  monitoring-running: "&arunning"
+  monitoring-stopped: "&cstopped"
+  # {colour} {tps}
+  tps: "&7TPS: {colour}{tps}&8 / 20"
+  # {colour} {mspt} {threshold}
+  mspt: "&7Tick time: {colour}{mspt} ms&8 (threshold: {threshold} ms)"
+  # {peak}
+  peak: "&7Longest freeze in window: &f{peak} ms"
+  # {baseline}
+  adaptive-ready: "&7Threshold: &fadaptive - this server normally runs at {baseline} ms"
+  # {have} {need}
+  adaptive-learning: "&7Threshold: &fadaptive - still learning ({have}/{need} samples, using the fixed value)"
+  # {seconds} {after}
+  breach: "&cThreshold exceeded for {seconds} s (alert after {after} s)."
+  # {seconds}
+  cooldown: "&7Next alert possible in &f{seconds} s&7."
+  discord: "&7Discord: {state}"
+  discord-configured: "&aconfigured"
+  discord-missing: "&edisabled or webhook missing"
+  # {spark}
+  spark: "&7Spark: &f{spark}"
+  spark-missing: "&7Spark: &8unavailable (using built-in measurements)"
+  remedy-off: "&7Automatic clean-up: &8off (the plugin only looks, it changes nothing)"
+  # {next}
+  remedy-dry-run: "&7Automatic clean-up: &edry-run (reports only){next}"
+  remedy-active: "&7Automatic clean-up: &cACTIVE{next}"
+  # {seconds}
+  remedy-next: "&8 - next in {seconds} s"
+  protection-hooked: "&7Land protection: &ahooked - alerts can name an owner"
+  protection-missing: "&7Land protection: &8none found (falling back to who was last seen there)"
+  # {memory}
+  memory: "&7Memory: &f{memory}"
+  # {store} {recent}
+  history: "&7History: &f{store}&8 ({recent} in the last 24 h)"
+
+report:
+  already-running: "&eA scan is already running - the result will show up shortly."
+  # {tps} {mspt} {chunks} {entities}
+  summary: "&7TPS &f{tps}&7, tick time &f{mspt} ms&7, scanned &f{chunks}&7 chunks ({entities} entities)."
+  calm: "&aNo chunk stands out - the game world looks calm."
+  # {cause}
+  cause: "&7Likely cause: &b{cause}"
+  # {advice}
+  advice: "&e{advice}"
+  # {note} - the memory, plugin and chunk-loading notes all use this one
+  note: "&e{note}"
+  # {spark}
+  spark: "&8{spark}"
+  # {index} {location} {entities} {tiles} {dominant}
+  chunk: "&8 {index}. &f{location}&7 - {entities} entities, {tiles} block entities{dominant}"
+  # {count} {type}
+  chunk-dominant: "&8 (mostly {count}x {type})"
+  # {attribution}
+  chunk-owner: "&8    {attribution}"
+  # {history}
+  chunk-history: "&e    repeat offender: {history}"
+  sent-to-discord: "&7Report also sent to Discord."
+  discord-unconfigured: "&cDiscord is disabled or the webhook URL is empty."
+
+plugins:
+  disabled: "&eProfiling is off - set profiler.enabled to true in config.yml."
+  nothing-measured: "&aNothing measured yet - give it a few seconds."
+  # {seconds} {handlers}
+  window: "&7Event handler time over the last {seconds} s&8 ({handlers} handlers watched)"
+  # {index} {colour} {plugin} {ms} {share} {event}
+  entry: "&8 {index}. {colour}{plugin}&7 - {ms} ms ({share}%)&8 {event}"
+  all-clear: "&aNo plugin stands out - none of them is holding the tick."
+  # {tasks}
+  pending-tasks: "&7Pending scheduler tasks: &8{tasks}"
+
+history:
+  empty: "&aNo incidents recorded yet."
+  # {time} {ago} {mspt} {cause} {location} {manual}
+  entry: "&8{time}&7 ({ago} ago) &f{mspt} ms&7 - {cause}{location}{manual}"
+  # {location}
+  at: "&8 @ {location}"
+  manual: "&8 [manual]"
+
+offenders:
+  empty: "&aNo chunk has been behind more than one incident - nothing here is a standing problem."
+  # {index} {colour} {location} {hits} {total} {worst} {ago}
+  entry: "&8 {index}. {colour}{location}&7 - behind {hits} of the last {total} incidents (worst {worst} ms)&8, last {ago} ago"
+  # {location} {x} {z}
+  start-here: "&eStart with {location} - fixing that one place would have prevented most of these. /tp {x} ~ {z}"
+
+stats:
+  empty: "&aNo incidents in this period - the server held up well."
+  # {count}
+  recorded: "&7Recorded: &f{count}"
+  # {cause} {count}
+  dominant-cause: "&7Most common cause: &b{cause}&8 ({count}x)"
+  # {hour} {count}
+  worst-hour: "&7Worst time of day: &f{hour}:00-{hour}:59&8 ({count})"
+  # {mspt} {when} {location}
+  worst-moment: "&7Worst moment: &f{mspt} ms&8 {when} - {location}"
+  histogram-header: "&7Spread across the day:"
+  # {row}
+  histogram-row: "&8 {row}"
+
+reload:
+  # {threshold} {seconds} {adaptive}
+  done: "&aConfiguration reloaded. Threshold: {threshold} ms for {seconds} s.{adaptive}"
+  adaptive-relearning: " The adaptive threshold is relearning this server's normal tick time."
+
 alert:
   # Placeholders: {cause} {location} {x} {z}
   lagging: "&c[TickSentry] &eServer is lagging: &b{cause}&7 at &f{location}&8 (/tp {x} ~ {z})"
@@ -27,6 +178,15 @@ remedy:
   warning-mobs: "&e[TickSentry] &7Some of the &f{type}&7 at &f{location}&7 will be removed in &f{seconds}&7 s."
   # Sent to admins afterwards. Placeholders: {summary}
   summary: "&e[TickSentry] &7{summary}"
+
+# What the %ticksentry_...% placeholders return. These land on scoreboards and in chat formats,
+# so keep them short.
+placeholder:
+  status-ok: "OK"
+  status-lag: "LAG"
+  monitoring-running: "running"
+  monitoring-stopped: "stopped"
+  no-category: "none"
 
 update:
   # Shown to admins on join. Placeholders: {latest} {current} {url}

@@ -295,9 +295,21 @@ it wherever the sentence needs it. Run `/lagwatch reload` afterwards.
 A key you delete falls back to the English copy inside the jar, so a partial translation is safe,
 and a key added by a future update never leaves a blank line where a message used to be.
 
-**Not covered yet:** console output, `/lagwatch` command replies, the Discord embeds, and the
-generated advice sentences ("Go there, suspected farm: 841x cow") are still English in the code.
-Those are read by admins rather than players, which is why the in-chat text came first.
+Everything a person reads is in there: the lag warning, every `/lagwatch` reply, the Discord
+embed, the `%ticksentry_...%` placeholders, and the advice sentences ("Go there, suspected farm:
+841x cow").
+
+Two details worth knowing:
+
+- **Discord** gets the same keys with colour codes stripped, since it would otherwise print the
+  section signs as literal characters. Discord's own `**bold**` works fine there.
+- **The advice sentences are not listed with English values.** The English for those lives in the
+  code, so `messages.yml` has no second copy of it to fall out of step. The `advice:` section is
+  commented-out examples documenting each key and the placeholders it takes - uncomment one and
+  write your own, or leave it and keep the built-in text.
+
+**Still English:** the server console. That is deliberate - console lines are what people paste
+into bug reports and search engines, and a translated stack trace helps nobody.
 
 ## Update checks and statistics
 
