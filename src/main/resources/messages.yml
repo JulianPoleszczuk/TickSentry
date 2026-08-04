@@ -1,7 +1,10 @@
 # TickSentry - the text your players and moderators see in chat.
 #
-# This file covers what appears IN GAME: the lag warning, the clean-up notice, the update
-# notice, and the names of the causes. Console output and command replies are still English.
+# This file covers everything a person reads: the lag warning, every /lagwatch reply, the
+# Discord alert, the %ticksentry_...% placeholders, and the names of the causes.
+#
+# The server console stays English and is not configurable here. Console lines are what people
+# paste into bug reports and search engines, so translating them would help nobody.
 #
 # Use & for colours (&c red, &e yellow, &7 grey, &f white, &b aqua, &8 dark grey).
 # Anything in {braces} is filled in by the plugin - keep the spelling, move it where you like.
