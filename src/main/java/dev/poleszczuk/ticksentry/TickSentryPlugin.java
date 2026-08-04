@@ -73,6 +73,14 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** How many plugins get their own Prometheus time series. */
     private static final int METRICS_PLUGINS = 10;
 
+    /**
+     * How often (in ticks) old incidents are swept (24 hours).
+     *
+     * <p>Pruning only at startup meant a server that stays up for months never applied its own
+     * {@code keep-days} setting - exactly the servers whose history grows enough to matter.</p>
+     */
+    private static final long PRUNE_TICKS = 20L * 60L * 60L * 24L;
+
     /** GitHub repository the update check reads releases from. */
     private static final String REPOSITORY = "JulianPoleszczuk/TickSentry";
 
@@ -153,6 +161,8 @@ public final class TickSentryPlugin extends JavaPlugin {
         startDashboard();
         startPluginProfiler();
         getServer().getScheduler().runTaskTimer(this, this::pollHealth, MEMORY_POLL_TICKS, MEMORY_POLL_TICKS);
+        getServer().getScheduler().runTaskTimer(this,
+                () -> alertStore.prune(configManager.storageKeepDays()), PRUNE_TICKS, PRUNE_TICKS);
         // First read after a second, so the panel and placeholders do not show zero for a whole minute.
         getServer().getScheduler().runTaskTimer(this, this::refreshCounters, 20L, COUNTER_REFRESH_TICKS);
 

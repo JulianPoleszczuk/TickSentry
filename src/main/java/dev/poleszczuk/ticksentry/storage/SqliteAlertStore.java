@@ -106,9 +106,7 @@ public final class SqliteAlertStore implements AlertStore {
             }
 
             SqliteAlertStore store = new SqliteAlertStore(plugin, file, connection);
-            if (keepDays > 0) {
-                store.executor.execute(() -> store.prune(keepDays));
-            }
+            store.prune(keepDays);
             return store;
         } catch (SQLException | RuntimeException | NoClassDefFoundError ex) {
             plugin.getLogger().log(Level.WARNING,
@@ -240,8 +238,16 @@ public final class SqliteAlertStore implements AlertStore {
         }
     }
 
-    /** Deletes rows older than the given number of days. */
-    private void prune(int keepDays) {
+    @Override
+    public void prune(int keepDays) {
+        if (keepDays <= 0) {
+            return;
+        }
+        executor.execute(() -> pruneNow(keepDays));
+    }
+
+    /** Deletes rows older than the given number of days. Runs on the storage thread. */
+    private void pruneNow(int keepDays) {
         try (PreparedStatement statement = connection.prepareStatement("DELETE FROM incidents WHERE ts < ?")) {
             statement.setLong(1, Instant.now().minus(keepDays, ChronoUnit.DAYS).toEpochMilli());
             int removed = statement.executeUpdate();

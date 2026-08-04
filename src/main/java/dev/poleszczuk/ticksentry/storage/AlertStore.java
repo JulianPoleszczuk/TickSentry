@@ -46,6 +46,16 @@ public interface AlertStore {
      */
     void offenders(int days, int limit, Consumer<List<RepeatOffender>> callback);
 
+    /**
+     * Deletes incidents older than the retention period.
+     *
+     * <p>Called on a timer as well as at startup: a server that stays up for months would
+     * otherwise never apply its own {@code keep-days} setting.</p>
+     *
+     * @param keepDays how many days to keep; zero or less means keep everything
+     */
+    void prune(int keepDays);
+
     /** @return short description of the store type, shown in {@code /lagwatch status} */
     String describe();
 

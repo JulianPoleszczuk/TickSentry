@@ -73,6 +73,11 @@ public final class MemoryAlertStore implements AlertStore {
     }
 
     @Override
+    public void prune(int keepDays) {
+        // Nothing to do - this store is bounded by capacity and dies with the server anyway.
+    }
+
+    @Override
     public String describe() {
         return "memory (lost on restart)";
     }
