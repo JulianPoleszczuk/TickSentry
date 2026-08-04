@@ -25,6 +25,7 @@ import dev.poleszczuk.ticksentry.storage.MemoryAlertStore;
 import dev.poleszczuk.ticksentry.storage.OffenderIndex;
 import dev.poleszczuk.ticksentry.storage.SqliteAlertStore;
 import dev.poleszczuk.ticksentry.storage.StoredIncident;
+import dev.poleszczuk.ticksentry.util.BStatsReporter;
 import dev.poleszczuk.ticksentry.util.FoliaSupport;
 import dev.poleszczuk.ticksentry.util.UpdateChecker;
 import dev.poleszczuk.ticksentry.web.DashboardServer;
@@ -144,6 +145,7 @@ public final class TickSentryPlugin extends JavaPlugin {
 
         registerPlaceholders();
         startUpdateCheck();
+        startStatistics();
         startDashboard();
         startPluginProfiler();
         getServer().getScheduler().runTaskTimer(this, this::pollHealth, MEMORY_POLL_TICKS, MEMORY_POLL_TICKS);
@@ -227,6 +229,28 @@ public final class TickSentryPlugin extends JavaPlugin {
         UpdateChecker checker = new UpdateChecker(this, REPOSITORY);
         getServer().getPluginManager().registerEvents(checker, this);
         checker.checkAsync();
+    }
+
+    /**
+     * Starts sending anonymous usage statistics, if both this config and bStats' own allow it.
+     *
+     * <p>The charts are chosen to answer questions that change what gets built next: which
+     * Minecraft versions still need supporting, and whether anyone actually turns the optional
+     * features on.</p>
+     */
+    private void startStatistics() {
+        if (!configManager.bstatsEnabled()) {
+            return;
+        }
+        BStatsReporter reporter = new BStatsReporter(this);
+        reporter.chart("minecraft_version", getServer().getBukkitVersion().split("-")[0]);
+        reporter.chart("discord_configured", String.valueOf(configManager.discordEnabled()));
+        reporter.chart("profiler_enabled", String.valueOf(configManager.profilerEnabled()));
+        reporter.chart("dashboard_enabled", String.valueOf(configManager.dashboardEnabled()));
+        reporter.chart("storage_backend", alertStore.describe().startsWith("SQLite") ? "sqlite" : "memory");
+        reporter.chart("remediation_mode", !configManager.remedySettings().enabled() ? "off"
+                : configManager.remedySettings().dryRun() ? "dry-run" : "active");
+        reporter.start();
     }
 
     /** Registers the placeholders if PlaceholderAPI is on the server. */

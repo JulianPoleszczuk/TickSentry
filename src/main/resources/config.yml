@@ -50,6 +50,14 @@ updates:
   # Ask the GitHub releases page once at startup whether a newer TickSentry exists, and tell
   # you in the console and in game. Nothing is ever downloaded or installed - you decide.
   check: true
+  # Send anonymous usage statistics to bStats: server software and version, Java version,
+  # operating system, core count, player count, and which TickSentry features you have on.
+  # No addresses, no names, nothing about your world. It answers "which Minecraft versions
+  # still need supporting", which is otherwise guesswork.
+  #
+  # The server-wide switch in plugins/bStats/config.yml is honoured too - turning bStats off
+  # there turns it off here, whatever this says.
+  bstats: true
 
 profiler:
   # Measure how long every other plugin spends inside its event handlers, so an alert can name

@@ -275,6 +275,31 @@ distinct label value costs storage, and a server with eighty plugins would quiet
 
 Set `metrics: false` under `dashboard` to turn the endpoint off and keep only the page.
 
+## Update checks and statistics
+
+```yaml
+updates:
+  check: true                # ask GitHub at startup whether a newer version exists
+  bstats: true               # send anonymous usage statistics
+```
+
+The update check reads the GitHub releases page once at startup. **Nothing is ever downloaded or
+installed** - it tells you in the console, tells an admin who joins, and you decide.
+
+The statistics go to [bStats](https://bstats.org): server software and version, Java version,
+operating system, core count, player count, and which TickSentry features are switched on. No
+addresses, no names, nothing about your world. It exists to answer "which Minecraft versions
+still need supporting", which is otherwise guesswork.
+
+The server-wide switch in `plugins/bStats/config.yml` is honoured as well - turning bStats off
+there turns it off here, whatever this file says. There is no bundled bStats library; the plugin
+sends the payload itself, so the jar stays exactly as small as it was.
+
+> **For whoever maintains this fork:** statistics are inert until the plugin is registered at
+> bstats.org and the id it gives you is put into `BStatsReporter.SERVICE_ID`. Until then nothing
+> is sent, whatever the config says - that is deliberate, so a fork cannot accidentally post to
+> somebody else's page.
+
 ## Placeholders
 
 These work if you have PlaceholderAPI installed:
