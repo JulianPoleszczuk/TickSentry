@@ -189,8 +189,12 @@ public final class AutoRemediation {
         }
     }
 
-    /** @return whether this entity is one the action is aimed at */
-    private static boolean matches(Entity entity, RemedyAction action) {
+    /**
+     * @param entity entity found in the chunk
+     * @param action action being carried out
+     * @return whether this entity is one the action is aimed at
+     */
+    static boolean matches(Entity entity, RemedyAction action) {
         if (action.kind() == RemedyAction.Kind.CLEAR_ITEMS) {
             return entity instanceof Item || entity instanceof ExperienceOrb;
         }
@@ -202,8 +206,12 @@ public final class AutoRemediation {
      *
      * <p>Erring towards leaving things alone is the whole point. A missed mob costs a few
      * milliseconds a tick; a deleted pet costs a player something they cannot get back.</p>
+     *
+     * @param entity   entity being considered for removal
+     * @param settings what the admin has allowed, including the never-touch list
+     * @return whether the entity looks like it belongs to somebody
      */
-    private static boolean isCaredFor(Entity entity, RemedySettings settings) {
+    static boolean isCaredFor(Entity entity, RemedySettings settings) {
         if (entity instanceof Player) {
             return true;
         }

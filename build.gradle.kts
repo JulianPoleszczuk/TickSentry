@@ -24,6 +24,12 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+    // The API on the test classpath as well, so the classes that have to touch Bukkit can be
+    // tested too. No MockBukkit: HandlerList and RegisteredListener are ordinary Java objects
+    // that need no running server, and a mock server tied to one Minecraft version would sit
+    // awkwardly next to a plugin compiled against 1.16.
+    testImplementation("com.destroystokyo.paper:paper-api:1.16.5-R0.1-SNAPSHOT")
 }
 
 java {

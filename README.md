@@ -527,7 +527,20 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 169 of them and none need a fake server.
+Run the tests with `./gradlew test`. There are 190 of them, and none needs a running server.
+
+Most cover the pure decision-making. Two files cover the parts that have to touch Bukkit, because
+those are the ones that can damage somebody else's server:
+
+- `PluginProfilerTest` swaps listeners on a real `HandlerList` and checks that priority, listener
+  and the ignore-cancelled flag survive, that the delegate still receives the event, and that
+  uninstalling puts the original object back.
+- `RemedySafetyTest` checks every rule that decides what the automatic clean-up refuses to
+  delete - players, named mobs, tamed pets, leashed animals, anything riding or being ridden.
+
+Neither uses MockBukkit. `HandlerList` and `RegisteredListener` are ordinary Java objects, and
+Bukkit entities are interfaces, so a proxy is enough - and unlike a mock server it cannot quietly
+answer something the real API would not.
 
 Every push runs the same build on GitHub Actions, which also checks that the jar is still Java 11
 bytecode - so nobody can break 1.16 support by accident.
