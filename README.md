@@ -275,6 +275,30 @@ distinct label value costs storage, and a server with eighty plugins would quiet
 
 Set `metrics: false` under `dashboard` to turn the endpoint off and keep only the page.
 
+## Translating what players see
+
+`plugins/TickSentry/messages.yml` holds the text that appears **in chat**: the lag warning, the
+clean-up notice, the update notice, and the names of the causes.
+
+```yaml
+alert:
+  lagging: "&c[TickSentry] &eSerwer muli: &b{cause}&7 przy &f{location}&8 (/tp {x} ~ {z})"
+category:
+  MOB_FARM:
+    title: "Farma mobów"
+    description: "Dużo tych samych stworów w jednym miejscu"
+```
+
+Use `&` for colours. Anything in `{braces}` is filled in by the plugin - keep the spelling, move
+it wherever the sentence needs it. Run `/lagwatch reload` afterwards.
+
+A key you delete falls back to the English copy inside the jar, so a partial translation is safe,
+and a key added by a future update never leaves a blank line where a message used to be.
+
+**Not covered yet:** console output, `/lagwatch` command replies, the Discord embeds, and the
+generated advice sentences ("Go there, suspected farm: 841x cow") are still English in the code.
+Those are read by admins rather than players, which is why the in-chat text came first.
+
 ## Update checks and statistics
 
 ```yaml
@@ -486,7 +510,7 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 138 of them and none need a fake server.
+Run the tests with `./gradlew test`. There are 159 of them and none need a fake server.
 
 Every push runs the same build on GitHub Actions, which also checks that the jar is still Java 11
 bytecode - so nobody can break 1.16 support by accident.

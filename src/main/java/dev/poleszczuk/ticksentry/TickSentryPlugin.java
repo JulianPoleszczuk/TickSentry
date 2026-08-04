@@ -2,6 +2,7 @@ package dev.poleszczuk.ticksentry;
 
 import dev.poleszczuk.ticksentry.commands.LagWatchCommand;
 import dev.poleszczuk.ticksentry.config.ConfigManager;
+import dev.poleszczuk.ticksentry.config.MessageBundle;
 import dev.poleszczuk.ticksentry.discord.DiscordWebhookClient;
 import dev.poleszczuk.ticksentry.monitor.AdaptiveThreshold;
 import dev.poleszczuk.ticksentry.monitor.ChunkAttribution;
@@ -88,6 +89,7 @@ public final class TickSentryPlugin extends JavaPlugin {
     private static final long PROFILER_INSTALL_TICKS = 20L * 60L;
 
     private ConfigManager configManager;
+    private MessageBundle messages;
     private TickMonitor tickMonitor;
     private ChunkHotspotScanner scanner;
     private DiscordWebhookClient webhook;
@@ -117,6 +119,7 @@ public final class TickSentryPlugin extends JavaPlugin {
         }
         saveDefaultConfig();
         this.configManager = new ConfigManager(this);
+        this.messages = new MessageBundle(this);
         this.alertStore = openStore();
         this.sparkBridge = new SparkBridge(this);
         this.memoryWatcher = new MemoryWatcher(MEMORY_POLL_TICKS * 50L);
@@ -129,7 +132,7 @@ public final class TickSentryPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(chunkVisitors, this);
         getServer().getPluginManager().registerEvents(chunkLoadRate, this);
         this.webhook = new DiscordWebhookClient(this, configManager, this::effectiveThresholdMs);
-        this.remediation = new AutoRemediation(this, configManager::remedySettings, this::reportRemediation);
+        this.remediation = new AutoRemediation(this, configManager::remedySettings, this::reportRemediation, messages);
         this.adaptiveThreshold = new AdaptiveThreshold(configManager.adaptiveSettings(),
                 (int) (MEMORY_POLL_TICKS / 20L));
         this.tickMonitor = new TickMonitor(this, configManager, adaptiveThreshold,
@@ -226,7 +229,7 @@ public final class TickSentryPlugin extends JavaPlugin {
         if (!configManager.updateCheck()) {
             return;
         }
-        UpdateChecker checker = new UpdateChecker(this, REPOSITORY);
+        UpdateChecker checker = new UpdateChecker(this, REPOSITORY, messages);
         getServer().getPluginManager().registerEvents(checker, this);
         checker.checkAsync();
     }
@@ -436,9 +439,10 @@ public final class TickSentryPlugin extends JavaPlugin {
      */
     private void reportRemediation(String summary) {
         getLogger().warning(summary);
+        String line = messages.get("remedy.summary", "summary", summary);
         for (Player player : getServer().getOnlinePlayers()) {
             if (player.hasPermission("ticksentry.alerts")) {
-                player.sendMessage(ChatColor.YELLOW + "[TickSentry] " + ChatColor.GRAY + summary);
+                player.sendMessage(line);
             }
         }
         webhook.sendRemediation(summary);
@@ -458,22 +462,31 @@ public final class TickSentryPlugin extends JavaPlugin {
             return;
         }
         ChunkStat primary = event.primaryChunk();
-        String where = primary == null
-                ? ""
-                : ChatColor.GRAY + " at " + ChatColor.WHITE + primary.prettyLocation()
-                  + ChatColor.DARK_GRAY + " (/tp " + primary.blockX() + " ~ " + primary.blockZ() + ")";
+        String cause = messages.categoryTitle(event.category());
 
-        String headline = ChatColor.RED + "[TickSentry] " + ChatColor.YELLOW + "Server is lagging: "
-                + ChatColor.AQUA + event.category().title() + where;
+        String headline = primary == null
+                ? messages.get("alert.lagging-no-location", "cause", cause)
+                : messages.get("alert.lagging",
+                        "cause", cause,
+                        "location", primary.prettyLocation(),
+                        "x", String.valueOf(primary.blockX()),
+                        "z", String.valueOf(primary.blockZ()));
+
         String whose = primary == null || primary.attribution() == null
                 ? null
-                : ChatColor.DARK_GRAY + "           " + primary.attribution();
+                : messages.get("alert.attribution", "attribution", primary.attribution());
+        String record = primary == null || primary.historyNote() == null
+                ? null
+                : messages.get("alert.repeat-offender", "history", primary.historyNote());
 
         for (Player player : getServer().getOnlinePlayers()) {
             if (player.hasPermission("ticksentry.alerts")) {
                 player.sendMessage(headline);
                 if (whose != null) {
                     player.sendMessage(whose);
+                }
+                if (record != null) {
+                    player.sendMessage(record);
                 }
             }
         }
@@ -512,6 +525,11 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** @return the plugin configuration manager */
     public ConfigManager configManager() {
         return configManager;
+    }
+
+    /** @return the translatable text shown to players */
+    public MessageBundle messages() {
+        return messages;
     }
 
     /** @return the running tick monitor */

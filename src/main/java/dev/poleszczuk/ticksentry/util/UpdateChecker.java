@@ -1,6 +1,6 @@
 package dev.poleszczuk.ticksentry.util;
 
-import org.bukkit.ChatColor;
+import dev.poleszczuk.ticksentry.config.MessageBundle;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -28,6 +28,7 @@ import java.time.Duration;
 public final class UpdateChecker implements Listener {
 
     private final Plugin plugin;
+    private final MessageBundle messages;
     private final String releasesApi;
     private final String releasesPage;
 
@@ -36,9 +37,11 @@ public final class UpdateChecker implements Listener {
     /**
      * @param plugin     plugin instance, for its version and logging
      * @param repository GitHub repository in {@code owner/name} form
+     * @param messages   the notice shown in game, so it can be translated
      */
-    public UpdateChecker(Plugin plugin, String repository) {
+    public UpdateChecker(Plugin plugin, String repository, MessageBundle messages) {
         this.plugin = plugin;
+        this.messages = messages;
         this.releasesApi = "https://api.github.com/repos/" + repository + "/releases/latest";
         this.releasesPage = "https://github.com/" + repository + "/releases";
     }
@@ -95,8 +98,9 @@ public final class UpdateChecker implements Listener {
         if (newer == null || !event.getPlayer().hasPermission("ticksentry.admin")) {
             return;
         }
-        event.getPlayer().sendMessage(ChatColor.AQUA + "[TickSentry] " + ChatColor.GRAY
-                + "Version " + ChatColor.WHITE + newer + ChatColor.GRAY + " is out (you have "
-                + plugin.getDescription().getVersion() + "). " + ChatColor.DARK_GRAY + releasesPage);
+        event.getPlayer().sendMessage(messages.get("update.available",
+                "latest", newer,
+                "current", plugin.getDescription().getVersion(),
+                "url", releasesPage));
     }
 }

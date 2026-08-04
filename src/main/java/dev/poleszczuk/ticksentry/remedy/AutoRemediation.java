@@ -1,8 +1,8 @@
 package dev.poleszczuk.ticksentry.remedy;
 
+import dev.poleszczuk.ticksentry.config.MessageBundle;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
 import org.bukkit.Chunk;
-import org.bukkit.ChatColor;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.ExperienceOrb;
@@ -36,6 +36,7 @@ public final class AutoRemediation {
     private final Plugin plugin;
     private final Supplier<RemedySettings> settings;
     private final Consumer<String> reporter;
+    private final MessageBundle messages;
 
     private long lastRunMillis;
 
@@ -43,11 +44,14 @@ public final class AutoRemediation {
      * @param plugin   plugin instance (scheduler, worlds, logging)
      * @param settings current settings, re-read so {@code /lagwatch reload} takes effect
      * @param reporter receives a summary of what happened, for the log and Discord
+     * @param messages the warning players see, so it can be translated
      */
-    public AutoRemediation(Plugin plugin, Supplier<RemedySettings> settings, Consumer<String> reporter) {
+    public AutoRemediation(Plugin plugin, Supplier<RemedySettings> settings, Consumer<String> reporter,
+                           MessageBundle messages) {
         this.plugin = plugin;
         this.settings = settings;
         this.reporter = reporter;
+        this.messages = messages;
     }
 
     /**
@@ -109,8 +113,17 @@ public final class AutoRemediation {
         if (world == null) {
             return;
         }
-        String message = ChatColor.YELLOW + "[TickSentry] " + action.announcement()
-                + (seconds > 0 ? " in " + seconds + " s." : ".");
+        // Players losing their things deserve to read it in their own language, so this line
+        // comes from messages.yml rather than from the action's own English description.
+        String message = action.kind() == RemedyAction.Kind.CLEAR_ITEMS
+                ? messages.get("remedy.warning-items",
+                        "location", action.prettyLocation(),
+                        "seconds", String.valueOf(seconds))
+                : messages.get("remedy.warning-mobs",
+                        "type", friendly(action.entityType()),
+                        "location", action.prettyLocation(),
+                        "seconds", String.valueOf(seconds));
+
         for (Player player : world.getPlayers()) {
             player.sendMessage(message);
         }
@@ -210,6 +223,10 @@ public final class AutoRemediation {
             return true;
         }
         return entity instanceof Item && hasCustomName(((Item) entity).getItemStack());
+    }
+
+    private static String friendly(String type) {
+        return type == null ? "entities" : type.toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
     }
 
     /** A renamed item was somebody's doing, so it is not litter. */

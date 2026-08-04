@@ -1,0 +1,69 @@
+# TickSentry - the text your players and moderators see in chat.
+#
+# This file covers what appears IN GAME: the lag warning, the clean-up notice, the update
+# notice, and the names of the causes. Console output and command replies are still English.
+#
+# Use & for colours (&c red, &e yellow, &7 grey, &f white, &b aqua, &8 dark grey).
+# Anything in {braces} is filled in by the plugin - keep the spelling, move it where you like.
+# After editing, run /lagwatch reload.
+#
+# A key you delete falls back to the English copy inside the jar, so an incomplete file is
+# safe. New keys added by an update behave the same way.
+
+alert:
+  # Placeholders: {cause} {location} {x} {z}
+  lagging: "&c[TickSentry] &eServer is lagging: &b{cause}&7 at &f{location}&8 (/tp {x} ~ {z})"
+  # Shown when no single chunk was to blame. Placeholders: {cause}
+  lagging-no-location: "&c[TickSentry] &eServer is lagging: &b{cause}"
+  # Who the place belongs to. Placeholders: {attribution}
+  attribution: "&8           {attribution}"
+  # Shown when that chunk has caused trouble before. Placeholders: {history}
+  repeat-offender: "&6           not the first time: {history}"
+
+remedy:
+  # Warning before dropped items are swept. Placeholders: {location} {seconds}
+  warning-items: "&e[TickSentry] &7Dropped items at &f{location}&7 will be cleared in &f{seconds}&7 s."
+  # Warning before mobs are removed. Placeholders: {type} {location} {seconds}
+  warning-mobs: "&e[TickSentry] &7Some of the &f{type}&7 at &f{location}&7 will be removed in &f{seconds}&7 s."
+  # Sent to admins afterwards. Placeholders: {summary}
+  summary: "&e[TickSentry] &7{summary}"
+
+update:
+  # Shown to admins on join. Placeholders: {latest} {current} {url}
+  available: "&b[TickSentry] &7Version &f{latest}&7 is out (you have {current}). &8{url}"
+
+# Names of the causes. The title is what an alert calls it; the description explains it.
+category:
+  MOB_FARM:
+    title: "Mob farm"
+    description: "Lots of entities of the same type in one place"
+  ITEM_CLUTTER:
+    title: "Dropped items"
+    description: "Hundreds of items or XP orbs lying on the ground"
+  REDSTONE:
+    title: "Redstone / hoppers"
+    description: "Lots of hoppers, droppers or furnaces"
+  SPAWNERS:
+    title: "Mob spawners"
+    description: "Several spawners running side by side"
+  MINECARTS:
+    title: "Minecart contraption"
+    description: "A lot of minecarts, usually hopper carts under a farm"
+  CHUNK_LOADING:
+    title: "Chunk loading"
+    description: "New land is being generated or read from disk"
+  PLAYER_CLUSTER:
+    title: "Player crowd"
+    description: "Many players inside a single chunk"
+  ENTITY_OVERLOAD:
+    title: "Entity overload"
+    description: "A large mix of different entities at once"
+  MEMORY:
+    title: "Memory / garbage collector"
+    description: "The server ran out of breathing room in RAM"
+  PLUGIN:
+    title: "Plugin"
+    description: "One plugin's event handlers are eating the tick"
+  UNKNOWN:
+    title: "No obvious source"
+    description: "No chunk stands out clearly"
