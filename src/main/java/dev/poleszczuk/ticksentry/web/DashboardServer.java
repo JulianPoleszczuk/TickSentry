@@ -83,11 +83,18 @@ public final class DashboardServer {
                 return thread;
             }));
             server.start();
-            plugin.getLogger().info("Web panel: http://" + bind + ":" + port + "/?token=" + token);
+
+            // The token is deliberately kept out of the log. Admins are told to paste their
+            // console into bug reports, and a log line holding a working access token is how
+            // somebody ends up publishing one - especially after changing bind to 0.0.0.0.
+            plugin.getLogger().info("Web panel: http://" + bind + ":" + port
+                    + "/ - open it with the token from config.yml (dashboard.token).");
             if (metricsEnabled) {
                 plugin.getLogger().info("Prometheus metrics: http://" + bind + ":" + port
-                        + "/metrics?token=" + token);
+                        + "/metrics - same token, as ?token= or an X-Auth-Token header.");
             }
+            plugin.getLogger().fine("Panel URL including the token: http://" + bind + ":" + port
+                    + "/?token=" + token);
             return true;
         } catch (IOException | RuntimeException ex) {
             plugin.getLogger().log(Level.WARNING, "Could not start the web panel", ex);

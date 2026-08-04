@@ -206,14 +206,18 @@ console - the plugin writes down what Discord answered.
 
 ## The web page
 
-Set `enabled: true` under `dashboard` and restart. The console will print a link:
+Set `enabled: true` under `dashboard` and restart. The console will print the address:
 
 ```
-[TickSentry] Web panel: http://127.0.0.1:8080/?token=a15e51d7...
+[TickSentry] Web panel: http://127.0.0.1:8080/ - open it with the token from config.yml (dashboard.token).
 ```
 
-Open it in a browser. You get TPS, tick time, the number of players, a chart of the last hour, and
-a table of past incidents. It updates itself every 2 seconds.
+The token is **not** printed. Consoles get pasted into bug reports, and a log line carrying a
+working access token is how somebody accidentally publishes one. Copy it out of `config.yml`
+and open `http://127.0.0.1:8080/?token=your-token`.
+
+You get TPS, tick time, the number of players, a chart of the last hour, and a table of past
+incidents. It updates itself every 2 seconds.
 
 **You do not have to host anything.** The page runs inside the plugin, on the same computer as
 your server. There is no website to sign up for and nothing to pay.
