@@ -23,6 +23,7 @@ public final class TickMonitor implements Runnable {
 
     private final Plugin plugin;
     private final ConfigManager config;
+    private final AdaptiveThreshold adaptive;
     private final Server server;
     private final Runnable onSustainedLag;
     private final LongConsumer onRecovered;
@@ -44,12 +45,15 @@ public final class TickMonitor implements Runnable {
     /**
      * @param plugin         plugin instance (used for the scheduler)
      * @param config         source of thresholds and time windows
+     * @param adaptive       threshold that learns this server's normal tick time
      * @param onSustainedLag action run on the main thread once sustained lag is detected
      * @param onRecovered    action run once the server recovers, with the incident length in seconds
      */
-    public TickMonitor(Plugin plugin, ConfigManager config, Runnable onSustainedLag, LongConsumer onRecovered) {
+    public TickMonitor(Plugin plugin, ConfigManager config, AdaptiveThreshold adaptive,
+                       Runnable onSustainedLag, LongConsumer onRecovered) {
         this.plugin = plugin;
         this.config = config;
+        this.adaptive = adaptive;
         this.server = plugin.getServer();
         this.onSustainedLag = onSustainedLag;
         this.onRecovered = onRecovered;
@@ -113,7 +117,7 @@ public final class TickMonitor implements Runnable {
     /** Checks whether the threshold has been exceeded long enough and fires an alert if so. */
     private void evaluate() {
         long nowMillis = System.currentTimeMillis();
-        if (averageMspt() <= config.msptThresholdMs()) {
+        if (averageMspt() <= thresholdMs()) {
             breachStartMillis = -1L;
             checkRecovery(nowMillis);
             return;
@@ -179,6 +183,14 @@ public final class TickMonitor implements Runnable {
         } catch (RuntimeException ex) {
             plugin.getLogger().warning("Error while handling recovery: " + ex);
         }
+    }
+
+    /**
+     * @return the tick time above which the server counts as overloaded right now - either the
+     *         fixed value from the configuration or the one the adaptive threshold worked out
+     */
+    public double thresholdMs() {
+        return adaptive.threshold(config.msptThresholdMs());
     }
 
     /** @return {@code true} if an unfinished lag incident is in progress */

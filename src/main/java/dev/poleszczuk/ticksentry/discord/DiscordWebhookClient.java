@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.DoubleSupplier;
 import java.util.stream.Collectors;
 import java.util.logging.Level;
 
@@ -40,16 +41,20 @@ public final class DiscordWebhookClient {
 
     private final Plugin plugin;
     private final ConfigManager config;
+    private final DoubleSupplier threshold;
     private final HttpClient http;
     private final ExecutorService executor;
 
     /**
-     * @param plugin plugin instance (logging)
-     * @param config source of the webhook address and mention settings
+     * @param plugin    plugin instance (logging)
+     * @param config    source of the webhook address and mention settings
+     * @param threshold the tick time currently counted as overloaded - read through a supplier
+     *                  because the adaptive threshold moves while the server runs
      */
-    public DiscordWebhookClient(Plugin plugin, ConfigManager config) {
+    public DiscordWebhookClient(Plugin plugin, ConfigManager config, DoubleSupplier threshold) {
         this.plugin = plugin;
         this.config = config;
+        this.threshold = threshold;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
@@ -224,7 +229,7 @@ public final class DiscordWebhookClient {
      */
     EmbedBuilder buildEmbed(LagEvent event) {
         ChunkStat primary = event.primaryChunk();
-        boolean healthy = event.manual() && event.averageMspt() <= config.msptThresholdMs();
+        boolean healthy = event.manual() && event.averageMspt() <= threshold.getAsDouble();
 
         EmbedBuilder embed = new EmbedBuilder()
                 .title(healthy ? "Requested report: the server looks healthy" : title(event))
@@ -241,7 +246,7 @@ public final class DiscordWebhookClient {
 
         embed.field("Server health", String.format(Locale.ROOT,
                 "TPS: **%.1f** / 20%nTick time: **%.0f ms** (threshold %.0f ms)%nLongest freeze: **%.0f ms**",
-                event.tps(), event.averageMspt(), config.msptThresholdMs(), event.peakMs()), true);
+                event.tps(), event.averageMspt(), threshold.getAsDouble(), event.peakMs()), true);
 
         if (primary != null) {
             embed.field("Where to look", describe(primary), true);

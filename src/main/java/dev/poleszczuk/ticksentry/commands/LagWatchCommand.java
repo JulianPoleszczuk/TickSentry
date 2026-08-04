@@ -1,6 +1,7 @@
 package dev.poleszczuk.ticksentry.commands;
 
 import dev.poleszczuk.ticksentry.TickSentryPlugin;
+import dev.poleszczuk.ticksentry.monitor.AdaptiveThreshold;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
 import dev.poleszczuk.ticksentry.monitor.LagCategory;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
@@ -102,7 +103,7 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
     private void showStatus(CommandSender sender) {
         TickMonitor monitor = plugin.tickMonitor();
         double mspt = monitor.averageMspt();
-        double threshold = plugin.configManager().msptThresholdMs();
+        double threshold = monitor.thresholdMs();
 
         header(sender, "Status");
         sender.sendMessage(ChatColor.GRAY + "Monitoring: " + (monitor.isRunning()
@@ -114,6 +115,16 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                 + ChatColor.DARK_GRAY + " (threshold: " + String.format(Locale.ROOT, "%.0f ms", threshold) + ")");
         sender.sendMessage(ChatColor.GRAY + "Longest freeze in window: " + ChatColor.WHITE
                 + String.format(Locale.ROOT, "%.0f ms", monitor.peakIntervalMs()));
+
+        AdaptiveThreshold adaptive = plugin.adaptiveThreshold();
+        if (plugin.configManager().adaptiveSettings().enabled()) {
+            sender.sendMessage(ChatColor.GRAY + "Threshold: " + ChatColor.WHITE
+                    + (adaptive.isReady()
+                    ? String.format(Locale.ROOT, "adaptive - this server normally runs at %.1f ms",
+                            adaptive.baseline())
+                    : "adaptive - still learning (" + adaptive.sampleCount() + "/"
+                      + AdaptiveThreshold.MIN_SAMPLES + " samples, using the fixed value)"));
+        }
 
         long breach = monitor.currentBreachSeconds();
         if (breach > 0L) {
@@ -367,10 +378,15 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
     private void reload(CommandSender sender) {
         plugin.configManager().reload();
         plugin.tickMonitor().reset();
+        // The baseline window length is a setting, so a reload starts it over rather than
+        // mixing samples taken under two different window sizes.
+        plugin.adaptiveThreshold().reconfigure(plugin.configManager().adaptiveSettings());
         header(sender, "Reload");
         sender.sendMessage(ChatColor.GREEN + "Configuration reloaded. Threshold: "
                 + String.format(Locale.ROOT, "%.0f ms", plugin.configManager().msptThresholdMs())
-                + " for " + plugin.configManager().sustainedSeconds() + " s.");
+                + " for " + plugin.configManager().sustainedSeconds() + " s."
+                + (plugin.configManager().adaptiveSettings().enabled()
+                ? " The adaptive threshold is relearning this server's normal tick time." : ""));
     }
 
     private static String describeDominant(ChunkStat stat) {

@@ -94,6 +94,8 @@ monitor:
   recovery-alert: true       # send a message when the server is fine again
   recovery-seconds: 15       # how long it must stay fine before that message
   in-game-alerts: true       # also tell admins who are online
+  adaptive-threshold:
+    enabled: false           # learn what "normal" is on this server, see below
 
 discord:
   enabled: true
@@ -154,6 +156,32 @@ server cannot keep up and players feel it.
 
 **TPS** is the same thing seen from the other side: how many rounds fit into one second. 20 is
 perfect. Below 18 people start noticing.
+
+### A threshold that fits your server
+
+A fixed 50 ms suits the average server and nobody else. A box that habitually runs at 45 ms gets
+an alert for every hiccup until the admin gives up and turns alerts off. A box that runs at 8 ms
+can quintuple its tick time - a real regression worth investigating - and never say a word.
+
+```yaml
+monitor:
+  adaptive-threshold:
+    enabled: true
+    multiplier: 2.0          # alert when the server is twice as slow as it usually is
+    minimum-ms: 25           # but never below this
+    maximum-ms: 100          # and always above this
+    baseline-minutes: 60
+```
+
+The baseline is the **median** tick time of the last hour, not the average, so a few bad minutes
+cannot teach the server that bad is normal. Samples taken during an incident are not counted at
+all, for the same reason.
+
+Both ends are clamped, and both clamps matter. Without the floor, a very quick server would alert
+on ordinary jitter. Without the ceiling, a permanently broken server would quietly learn that
+300 ms is fine and stop complaining altogether.
+
+`/lagwatch status` shows what it has settled on, and says so while it is still learning.
 
 ## Discord alerts
 
@@ -427,7 +455,7 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 113 of them and none need a fake server.
+Run the tests with `./gradlew test`. There are 125 of them and none need a fake server.
 
 Every push runs the same build on GitHub Actions, which also checks that the jar is still Java 11
 bytecode - so nobody can break 1.16 support by accident.

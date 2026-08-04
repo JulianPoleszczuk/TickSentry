@@ -19,6 +19,26 @@ monitor:
   # Also tell admins who are in the game? They need the ticksentry.alerts permission.
   in-game-alerts: true
 
+  # A fixed 50 ms suits the average server and nobody else. A server that habitually runs at
+  # 45 ms gets an alert for every hiccup; one that runs at 8 ms can quintuple its tick time -
+  # a real regression - and never say a word.
+  #
+  # With this on, the threshold becomes a multiple of what YOUR server normally does. The
+  # baseline is the median tick time of the last hour, so a few bad minutes cannot teach it
+  # that bad is normal, and samples taken during an incident are not counted at all.
+  adaptive-threshold:
+    enabled: false
+    # Alert once the server is this many times slower than it usually is.
+    multiplier: 2.0
+    # Never alert below this, however fast the server normally is. Without a floor, a very
+    # quick server would alert on ordinary jitter.
+    minimum-ms: 25
+    # Always alert above this, however slow the server normally is. Without a ceiling, a
+    # permanently broken server would quietly learn that 300 ms is fine.
+    maximum-ms: 100
+    # How much history the baseline is built from.
+    baseline-minutes: 60
+
 discord:
   enabled: true
   # Channel settings -> Integrations -> Webhooks -> New Webhook -> Copy Webhook URL

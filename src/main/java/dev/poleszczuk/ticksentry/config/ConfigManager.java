@@ -52,6 +52,7 @@ public final class ConfigManager {
     private volatile boolean dashboardMetrics;
     private volatile CostWeights costWeights;
     private volatile RemedySettings remedySettings = RemedySettings.disabled();
+    private volatile AdaptiveSettings adaptiveSettings = AdaptiveSettings.disabled();
 
     /**
      * Creates the manager and immediately loads the configuration from disk.
@@ -78,6 +79,13 @@ public final class ConfigManager {
         this.recoveryAlert = cfg.getBoolean("monitor.recovery-alert", true);
         this.recoverySeconds = Math.max(1, cfg.getInt("monitor.recovery-seconds", 15));
         this.inGameAlerts = cfg.getBoolean("monitor.in-game-alerts", true);
+
+        this.adaptiveSettings = new AdaptiveSettings(
+                cfg.getBoolean("monitor.adaptive-threshold.enabled", false),
+                cfg.getDouble("monitor.adaptive-threshold.multiplier", 2.0D),
+                cfg.getDouble("monitor.adaptive-threshold.minimum-ms", 25.0D),
+                cfg.getDouble("monitor.adaptive-threshold.maximum-ms", 100.0D),
+                cfg.getInt("monitor.adaptive-threshold.baseline-minutes", 60));
 
         this.storageEnabled = cfg.getBoolean("storage.enabled", true);
         this.storageKeepDays = Math.max(0, cfg.getInt("storage.keep-days", 30));
@@ -260,6 +268,11 @@ public final class ConfigManager {
     /** @return entity and block entity cost weights, with any config overrides applied */
     public CostWeights costWeights() {
         return costWeights;
+    }
+
+    /** @return how the alert threshold should adapt to this server's normal tick time */
+    public AdaptiveSettings adaptiveSettings() {
+        return adaptiveSettings;
     }
 
     /** @return what, if anything, the plugin is allowed to remove on its own */

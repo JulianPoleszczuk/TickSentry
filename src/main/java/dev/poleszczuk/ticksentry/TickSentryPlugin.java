@@ -3,6 +3,7 @@ package dev.poleszczuk.ticksentry;
 import dev.poleszczuk.ticksentry.commands.LagWatchCommand;
 import dev.poleszczuk.ticksentry.config.ConfigManager;
 import dev.poleszczuk.ticksentry.discord.DiscordWebhookClient;
+import dev.poleszczuk.ticksentry.monitor.AdaptiveThreshold;
 import dev.poleszczuk.ticksentry.monitor.ChunkAttribution;
 import dev.poleszczuk.ticksentry.monitor.ChunkHotspotScanner;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
@@ -90,6 +91,7 @@ public final class TickSentryPlugin extends JavaPlugin {
     private ChunkVisitors chunkVisitors;
     private RegionLookup regionLookup;
     private AutoRemediation remediation;
+    private AdaptiveThreshold adaptiveThreshold;
     private DashboardServer dashboard;
 
     private volatile int incidentsLast24h;
@@ -109,9 +111,12 @@ public final class TickSentryPlugin extends JavaPlugin {
         this.scanner = new ChunkHotspotScanner(this, configManager, sparkBridge, memoryWatcher, pluginProfiler,
                 new ChunkAttribution(this, chunkVisitors, regionLookup, this::offenderIndex));
         getServer().getPluginManager().registerEvents(chunkVisitors, this);
-        this.webhook = new DiscordWebhookClient(this, configManager);
+        this.webhook = new DiscordWebhookClient(this, configManager, this::effectiveThresholdMs);
         this.remediation = new AutoRemediation(this, configManager::remedySettings, this::reportRemediation);
-        this.tickMonitor = new TickMonitor(this, configManager, this::handleSustainedLag, this::handleRecovery);
+        this.adaptiveThreshold = new AdaptiveThreshold(configManager.adaptiveSettings(),
+                (int) (MEMORY_POLL_TICKS / 20L));
+        this.tickMonitor = new TickMonitor(this, configManager, adaptiveThreshold,
+                this::handleSustainedLag, this::handleRecovery);
         this.tickMonitor.start();
 
         PluginCommand command = getCommand("lagwatch");
@@ -124,7 +129,7 @@ public final class TickSentryPlugin extends JavaPlugin {
         registerPlaceholders();
         startDashboard();
         startPluginProfiler();
-        getServer().getScheduler().runTaskTimer(this, memoryWatcher::poll, MEMORY_POLL_TICKS, MEMORY_POLL_TICKS);
+        getServer().getScheduler().runTaskTimer(this, this::pollHealth, MEMORY_POLL_TICKS, MEMORY_POLL_TICKS);
         // First read after a second, so the panel and placeholders do not show zero for a whole minute.
         getServer().getScheduler().runTaskTimer(this, this::refreshCounters, 20L, COUNTER_REFRESH_TICKS);
 
@@ -269,7 +274,7 @@ public final class TickSentryPlugin extends JavaPlugin {
                 tickMonitor.tps(),
                 tickMonitor.averageMspt(),
                 tickMonitor.peakIntervalMs(),
-                configManager.msptThresholdMs(),
+                tickMonitor.thresholdMs(),
                 getServer().getOnlinePlayers().size(),
                 tickMonitor.isRunning(),
                 tickMonitor.isInIncident(),
@@ -304,7 +309,7 @@ public final class TickSentryPlugin extends JavaPlugin {
                 tickMonitor.tps(),
                 tickMonitor.averageMspt(),
                 tickMonitor.peakIntervalMs(),
-                configManager.msptThresholdMs(),
+                tickMonitor.thresholdMs(),
                 getServer().getOnlinePlayers().size(),
                 tickMonitor.isRunning(),
                 tickMonitor.isInIncident(),
@@ -457,6 +462,30 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** @return the incident store (SQLite or in-memory) */
     public AlertStore alertStore() {
         return alertStore;
+    }
+
+    /**
+     * Takes the periodic health readings: memory, and a sample for the adaptive baseline.
+     *
+     * <p>Nothing is fed to the baseline during an incident. The whole point of it is what the
+     * server looks like when it is behaving - teaching it that a bad hour is normal would raise
+     * the threshold exactly when it should not move.</p>
+     */
+    private void pollHealth() {
+        memoryWatcher.poll();
+        if (!tickMonitor.isInIncident()) {
+            adaptiveThreshold.record(tickMonitor.averageMspt(), configManager.msptThresholdMs());
+        }
+    }
+
+    /** @return the tick time above which the server currently counts as overloaded */
+    public double effectiveThresholdMs() {
+        return tickMonitor.thresholdMs();
+    }
+
+    /** @return the threshold that learns this server's normal tick time */
+    public AdaptiveThreshold adaptiveThreshold() {
+        return adaptiveThreshold;
     }
 
     /** @return the memory and garbage collector watcher */
