@@ -41,19 +41,23 @@ public final class DashboardServer {
     private final String page;
 
     private volatile LiveSnapshot snapshot = LiveSnapshot.empty();
+    private volatile MetricsSnapshot metrics = MetricsSnapshot.empty();
     private volatile String incidentsJson = "[]";
     private final MsptHistory history;
+    private final boolean metricsEnabled;
     private HttpServer server;
 
     /**
-     * @param plugin  plugin instance (logging)
-     * @param token   token required on every request
-     * @param history sample buffer feeding the chart
+     * @param plugin         plugin instance (logging)
+     * @param token          token required on every request
+     * @param history        sample buffer feeding the chart
+     * @param metricsEnabled whether to serve the Prometheus endpoint as well
      */
-    public DashboardServer(Plugin plugin, String token, MsptHistory history) {
+    public DashboardServer(Plugin plugin, String token, MsptHistory history, boolean metricsEnabled) {
         this.plugin = plugin;
         this.token = token;
         this.history = history;
+        this.metricsEnabled = metricsEnabled;
         this.page = loadPage();
     }
 
@@ -70,6 +74,9 @@ public final class DashboardServer {
             server.createContext("/", this::handlePage);
             server.createContext("/api/live", exchange -> handleApi(exchange, this::liveJson));
             server.createContext("/api/incidents", exchange -> handleApi(exchange, () -> incidentsJson));
+            if (metricsEnabled) {
+                server.createContext("/metrics", this::handleMetrics);
+            }
             server.setExecutor(Executors.newFixedThreadPool(HTTP_THREADS, runnable -> {
                 Thread thread = new Thread(runnable, "TickSentry-Dashboard");
                 thread.setDaemon(true);
@@ -77,6 +84,10 @@ public final class DashboardServer {
             }));
             server.start();
             plugin.getLogger().info("Web panel: http://" + bind + ":" + port + "/?token=" + token);
+            if (metricsEnabled) {
+                plugin.getLogger().info("Prometheus metrics: http://" + bind + ":" + port
+                        + "/metrics?token=" + token);
+            }
             return true;
         } catch (IOException | RuntimeException ex) {
             plugin.getLogger().log(Level.WARNING, "Could not start the web panel", ex);
@@ -102,12 +113,35 @@ public final class DashboardServer {
     }
 
     /**
+     * Replaces the numbers served to Prometheus.
+     *
+     * @param metrics fresh snapshot taken on the main thread
+     */
+    public void updateMetrics(MetricsSnapshot metrics) {
+        this.metrics = metrics;
+    }
+
+    /**
      * Replaces the list of recent incidents.
      *
      * @param json ready JSON array of incidents
      */
     public void updateIncidents(String json) {
         this.incidentsJson = json;
+    }
+
+    /**
+     * Serves the Prometheus endpoint.
+     *
+     * <p>Guarded by the same token as everything else. Prometheus can send it either as a query
+     * parameter in the scrape URL or as an {@code X-Auth-Token} header.</p>
+     */
+    private void handleMetrics(HttpExchange exchange) throws IOException {
+        if (!authorized(exchange)) {
+            respond(exchange, 401, "text/plain; charset=utf-8", "Missing or invalid token.\n");
+            return;
+        }
+        respond(exchange, 200, "text/plain; version=0.0.4; charset=utf-8", metrics.render());
     }
 
     /** Builds the {@code /api/live} response: current state plus chart points. */

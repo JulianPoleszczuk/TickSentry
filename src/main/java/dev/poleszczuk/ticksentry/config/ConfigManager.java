@@ -48,6 +48,7 @@ public final class ConfigManager {
     private volatile String dashboardBind;
     private volatile int dashboardPort;
     private volatile String dashboardToken;
+    private volatile boolean dashboardMetrics;
     private volatile CostWeights costWeights;
 
     /**
@@ -89,6 +90,7 @@ public final class ConfigManager {
         this.dashboardBind = cfg.getString("dashboard.bind", "127.0.0.1").trim();
         this.dashboardPort = Math.min(65535, Math.max(1, cfg.getInt("dashboard.port", 8080)));
         this.dashboardToken = cfg.getString("dashboard.token", "").trim();
+        this.dashboardMetrics = cfg.getBoolean("dashboard.metrics", true);
 
         this.discordEnabled = cfg.getBoolean("discord.enabled", true);
         this.webhookUrl = cfg.getString("discord.webhook-url", "").trim();
@@ -229,6 +231,11 @@ public final class ConfigManager {
     /** @return web panel port */
     public int dashboardPort() {
         return dashboardPort;
+    }
+
+    /** @return whether the panel should also serve {@code /metrics} for Prometheus */
+    public boolean dashboardMetrics() {
+        return dashboardMetrics;
     }
 
     /** @return panel access token; empty means one has to be generated */

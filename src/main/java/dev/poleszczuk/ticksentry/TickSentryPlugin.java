@@ -9,8 +9,10 @@ import dev.poleszczuk.ticksentry.monitor.ChunkStat;
 import dev.poleszczuk.ticksentry.monitor.ChunkVisitors;
 import dev.poleszczuk.ticksentry.monitor.LagCategory;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
+import dev.poleszczuk.ticksentry.monitor.MemoryProbe;
 import dev.poleszczuk.ticksentry.monitor.MemoryWatcher;
 import dev.poleszczuk.ticksentry.monitor.PluginProfiler;
+import dev.poleszczuk.ticksentry.monitor.PluginTiming;
 import dev.poleszczuk.ticksentry.monitor.RegionLookup;
 import dev.poleszczuk.ticksentry.monitor.SparkBridge;
 import dev.poleszczuk.ticksentry.monitor.TickMonitor;
@@ -22,13 +24,17 @@ import dev.poleszczuk.ticksentry.storage.SqliteAlertStore;
 import dev.poleszczuk.ticksentry.storage.StoredIncident;
 import dev.poleszczuk.ticksentry.web.DashboardServer;
 import dev.poleszczuk.ticksentry.web.LiveSnapshot;
+import dev.poleszczuk.ticksentry.web.MetricsSnapshot;
 import dev.poleszczuk.ticksentry.web.MsptHistory;
 import org.bukkit.ChatColor;
+import org.bukkit.World;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -56,6 +62,9 @@ public final class TickSentryPlugin extends JavaPlugin {
 
     /** How many repeat offenders are kept in the cached ranking. */
     private static final int OFFENDERS_TRACKED = 25;
+
+    /** How many plugins get their own Prometheus time series. */
+    private static final int METRICS_PLUGINS = 10;
 
     /** How often (in ticks) memory and the garbage collector are read (5 seconds). */
     private static final long MEMORY_POLL_TICKS = 20L * 5L;
@@ -225,7 +234,7 @@ public final class TickSentryPlugin extends JavaPlugin {
         }
 
         MsptHistory history = new MsptHistory(SAMPLE_CAPACITY);
-        DashboardServer server = new DashboardServer(this, token, history);
+        DashboardServer server = new DashboardServer(this, token, history, configManager.dashboardMetrics());
         if (!server.start(configManager.dashboardBind(), configManager.dashboardPort())) {
             return;
         }
@@ -241,6 +250,9 @@ public final class TickSentryPlugin extends JavaPlugin {
             LiveSnapshot snapshot = collectSnapshot();
             history.add(snapshot.generatedAt(), snapshot.mspt(), snapshot.tps());
             server.update(snapshot);
+            if (configManager.dashboardMetrics()) {
+                server.updateMetrics(collectMetrics());
+            }
         }, SAMPLE_TICKS, SAMPLE_TICKS);
 
         getServer().getScheduler().runTaskTimer(this, () -> alertStore.recent(DASHBOARD_INCIDENTS_SHOWN,
@@ -261,6 +273,46 @@ public final class TickSentryPlugin extends JavaPlugin {
                 incidentsLast24h,
                 lastCategory == null ? null : lastCategory.title(),
                 sparkBridge.summary(),
+                System.currentTimeMillis());
+    }
+
+    /**
+     * Assembles the Prometheus snapshot - only ever valid on the main thread.
+     *
+     * <p>Plugin timings are capped at {@value #METRICS_PLUGINS} entries. Every distinct label
+     * value becomes its own time series in Prometheus, and a server with eighty plugins would
+     * otherwise quietly multiply the storage cost of the whole endpoint.</p>
+     */
+    private MetricsSnapshot collectMetrics() {
+        MemoryProbe.MemorySample memory = memoryWatcher.sample();
+
+        int loadedChunks = 0;
+        for (World world : getServer().getWorlds()) {
+            loadedChunks += world.getLoadedChunks().length;
+        }
+
+        Map<String, Double> pluginSeconds = new LinkedHashMap<>();
+        for (PluginTiming timing : pluginProfiler.report(configManager.profilerWindowSeconds())
+                .top(METRICS_PLUGINS)) {
+            pluginSeconds.put(timing.pluginName(), timing.totalNanos() / 1_000_000_000.0D);
+        }
+
+        return new MetricsSnapshot(
+                tickMonitor.tps(),
+                tickMonitor.averageMspt(),
+                tickMonitor.peakIntervalMs(),
+                configManager.msptThresholdMs(),
+                getServer().getOnlinePlayers().size(),
+                tickMonitor.isRunning(),
+                tickMonitor.isInIncident(),
+                incidentsLast24h,
+                memory == null ? 0L : memory.usedBytes(),
+                memory == null ? -1L : memory.maxBytes(),
+                memory == null ? 0L : memory.collections(),
+                memory == null ? 0L : memory.collectionMs(),
+                loadedChunks,
+                offenderIndex.ranked().size(),
+                pluginSeconds,
                 System.currentTimeMillis());
     }
 

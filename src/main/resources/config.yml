@@ -66,6 +66,10 @@ dashboard:
   port: 8080
   # Empty = the plugin generates a random token on first start and writes it here.
   token: ""
+  # Also serve /metrics in the Prometheus format, so Grafana can chart TPS, tick time, memory
+  # and per-plugin handler time next to the rest of your machine's metrics. Uses the same
+  # token; point your scrape at http://host:port/metrics?token=... or send X-Auth-Token.
+  metrics: true
 
 # How expensive the plugin treats each kind of object, compared to an average mob (= 1.0).
 # You only need this if alerts blame the wrong thing on your server. Anything you do not

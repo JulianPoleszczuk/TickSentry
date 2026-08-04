@@ -29,7 +29,7 @@ Suggestion: Go there (/tp 1608 ~ 1608). Suspected farm: 841x cow.
 - Sends the alert to Discord, then sends a second message when the server is fine again.
 - Tells admins who are in the game, so you do not have to watch Discord.
 - Saves every incident, so you can ask what time of day your server usually struggles.
-- Has a small web page with a chart, if you want one.
+- Has a small web page with a chart, and a /metrics endpoint for Prometheus and Grafana.
 
 ## Install
 
@@ -116,6 +116,7 @@ dashboard:
   bind: "127.0.0.1"          # only this computer can open it
   port: 8080
   token: ""                  # leave empty, the plugin fills it in
+  metrics: true              # also serve /metrics for Prometheus
 
 weights:                     # optional, see below
   entities: {}
@@ -193,6 +194,46 @@ that works too.
 
 Changing `bind` to `0.0.0.0` opens the page to everyone on the network **without encryption**.
 The plugin warns you in the console if you do this.
+
+### Prometheus and Grafana
+
+The same web server also answers `/metrics` in the Prometheus format, so you can keep months of
+history, chart TPS next to your machine's CPU and memory, and get paged at three in the morning
+without leaving a browser tab open.
+
+```yaml
+scrape_configs:
+  - job_name: minecraft
+    static_configs:
+      - targets: ['127.0.0.1:8080']
+    params:
+      token: ['your-token-from-config-yml']
+```
+
+If you would rather not put the token in the URL, send it as a header instead - the endpoint
+accepts `X-Auth-Token` exactly like the panel does.
+
+What you get:
+
+| Metric | Meaning |
+| --- | --- |
+| `ticksentry_tps` | ticks per second, out of 20 |
+| `ticksentry_mspt_milliseconds` | average tick time |
+| `ticksentry_mspt_peak_milliseconds` | longest freeze in the window |
+| `ticksentry_players` | players online |
+| `ticksentry_heap_used_bytes` / `_max_bytes` | memory |
+| `ticksentry_gc_collections` / `_milliseconds` | garbage collector activity |
+| `ticksentry_loaded_chunks` | chunks loaded across all worlds |
+| `ticksentry_incidents_24h` | incidents in the last day |
+| `ticksentry_incident_active` | 1 while the server is lagging right now |
+| `ticksentry_repeat_offender_chunks` | how many chunks keep coming back |
+| `ticksentry_plugin_handler_seconds{plugin="..."}` | event handler time, per plugin |
+
+Everything is a gauge. A Prometheus counter must never decrease, and none of these numbers can
+promise that across a restart. Only the ten most expensive plugins get their own series - every
+distinct label value costs storage, and a server with eighty plugins would quietly multiply it.
+
+Set `metrics: false` under `dashboard` to turn the endpoint off and keep only the page.
 
 ## Placeholders
 
@@ -345,7 +386,7 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 85 of them and none need a fake server.
+Run the tests with `./gradlew test`. There are 96 of them and none need a fake server.
 
 Every push runs the same build on GitHub Actions, which also checks that the jar is still Java 11
 bytecode - so nobody can break 1.16 support by accident.
