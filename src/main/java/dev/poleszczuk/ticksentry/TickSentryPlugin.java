@@ -25,6 +25,7 @@ import dev.poleszczuk.ticksentry.storage.MemoryAlertStore;
 import dev.poleszczuk.ticksentry.storage.OffenderIndex;
 import dev.poleszczuk.ticksentry.storage.SqliteAlertStore;
 import dev.poleszczuk.ticksentry.storage.StoredIncident;
+import dev.poleszczuk.ticksentry.util.FoliaSupport;
 import dev.poleszczuk.ticksentry.util.UpdateChecker;
 import dev.poleszczuk.ticksentry.web.DashboardServer;
 import dev.poleszczuk.ticksentry.web.LiveSnapshot;
@@ -106,6 +107,13 @@ public final class TickSentryPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
+        if (FoliaSupport.isFolia()) {
+            // Bail out before touching the scheduler - on Folia the very first runTaskTimer
+            // throws, and an admin deserves a sentence rather than a stack trace.
+            getLogger().severe(FoliaSupport.explanation());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         saveDefaultConfig();
         this.configManager = new ConfigManager(this);
         this.alertStore = openStore();
@@ -151,6 +159,7 @@ public final class TickSentryPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        // Every field below is null when onEnable bailed out early, so each is guarded.
         if (tickMonitor != null) {
             tickMonitor.stop();
         }

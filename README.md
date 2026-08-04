@@ -59,6 +59,12 @@ running Java 8.
 
 Both ends were tested on real servers: Paper 1.16.5 on Java 11, and Paper 1.21.10 on Java 21.
 
+**Folia is not supported.** Folia ticks each region of the world on its own thread, which removes
+the two things this plugin is built on: one main thread that Bukkit calls can be made from, and
+one tick time that describes the whole server. Rather than report numbers it cannot measure,
+TickSentry notices Folia, explains itself in the console, and shuts down. Paper and Spigot are
+unaffected.
+
 ## Commands
 
 You need to be an operator (or have the `ticksentry.admin` permission). There is a second
