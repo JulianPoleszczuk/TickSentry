@@ -123,6 +123,10 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GRAY + "Spark: " + (spark == null
                 ? ChatColor.DARK_GRAY + "unavailable (using built-in measurements)"
                 : ChatColor.WHITE + spark));
+        sender.sendMessage(ChatColor.GRAY + "Land protection: " + (plugin.regionLookup().isAvailable()
+                ? ChatColor.GREEN + "hooked - alerts can name an owner"
+                : ChatColor.DARK_GRAY + "none found (falling back to who was last seen there)"));
+
         String memory = plugin.memoryWatcher().describe();
         if (memory != null) {
             sender.sendMessage(ChatColor.GRAY + "Memory: " + ChatColor.WHITE + memory);
@@ -163,6 +167,9 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(ChatColor.DARK_GRAY + " " + index++ + ". " + ChatColor.WHITE + stat.prettyLocation()
                         + ChatColor.GRAY + " - " + stat.entityCount() + " entities, "
                         + stat.tileEntityCount() + " block entities" + describeDominant(stat));
+                if (stat.attribution() != null) {
+                    sender.sendMessage(ChatColor.DARK_GRAY + "    " + stat.attribution());
+                }
             }
             sender.sendMessage(ChatColor.YELLOW + event.suggestedAction());
         }

@@ -279,6 +279,9 @@ public final class DiscordWebhookClient {
         if (stat.playerCount() > 0) {
             text.append("\nplayers in chunk: ").append(stat.playerCount());
         }
+        if (stat.attribution() != null) {
+            text.append("\n_").append(stat.attribution()).append('_');
+        }
         return text.toString();
     }
 

@@ -3,12 +3,15 @@ package dev.poleszczuk.ticksentry;
 import dev.poleszczuk.ticksentry.commands.LagWatchCommand;
 import dev.poleszczuk.ticksentry.config.ConfigManager;
 import dev.poleszczuk.ticksentry.discord.DiscordWebhookClient;
+import dev.poleszczuk.ticksentry.monitor.ChunkAttribution;
 import dev.poleszczuk.ticksentry.monitor.ChunkHotspotScanner;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
+import dev.poleszczuk.ticksentry.monitor.ChunkVisitors;
 import dev.poleszczuk.ticksentry.monitor.LagCategory;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
 import dev.poleszczuk.ticksentry.monitor.MemoryWatcher;
 import dev.poleszczuk.ticksentry.monitor.PluginProfiler;
+import dev.poleszczuk.ticksentry.monitor.RegionLookup;
 import dev.poleszczuk.ticksentry.monitor.SparkBridge;
 import dev.poleszczuk.ticksentry.monitor.TickMonitor;
 import dev.poleszczuk.ticksentry.placeholders.TickSentryExpansion;
@@ -70,6 +73,8 @@ public final class TickSentryPlugin extends JavaPlugin {
     private SparkBridge sparkBridge;
     private MemoryWatcher memoryWatcher;
     private PluginProfiler pluginProfiler;
+    private ChunkVisitors chunkVisitors;
+    private RegionLookup regionLookup;
     private DashboardServer dashboard;
 
     private volatile int incidentsLast24h;
@@ -83,7 +88,11 @@ public final class TickSentryPlugin extends JavaPlugin {
         this.sparkBridge = new SparkBridge(this);
         this.memoryWatcher = new MemoryWatcher(MEMORY_POLL_TICKS * 50L);
         this.pluginProfiler = new PluginProfiler(this);
-        this.scanner = new ChunkHotspotScanner(this, configManager, sparkBridge, memoryWatcher, pluginProfiler);
+        this.chunkVisitors = new ChunkVisitors();
+        this.regionLookup = new RegionLookup(this);
+        this.scanner = new ChunkHotspotScanner(this, configManager, sparkBridge, memoryWatcher, pluginProfiler,
+                new ChunkAttribution(this, chunkVisitors, regionLookup));
+        getServer().getPluginManager().registerEvents(chunkVisitors, this);
         this.webhook = new DiscordWebhookClient(this, configManager);
         this.tickMonitor = new TickMonitor(this, configManager, this::handleSustainedLag, this::handleRecovery);
         this.tickMonitor.start();
@@ -262,7 +271,8 @@ public final class TickSentryPlugin extends JavaPlugin {
                 event.averageMspt(), event.tps(), event.peakMs(), event.category().title()));
         for (ChunkStat stat : event.topChunks()) {
             getLogger().warning(" - " + stat.prettyLocation()
-                    + " (entities: " + stat.entityCount() + ", block entities: " + stat.tileEntityCount() + ")");
+                    + " (entities: " + stat.entityCount() + ", block entities: " + stat.tileEntityCount() + ")"
+                    + (stat.attribution() == null ? "" : " - " + stat.attribution()));
         }
         if (event.memoryNote() != null) {
             getLogger().warning("Memory: " + event.memoryNote());
@@ -291,10 +301,16 @@ public final class TickSentryPlugin extends JavaPlugin {
 
         String headline = ChatColor.RED + "[TickSentry] " + ChatColor.YELLOW + "Server is lagging: "
                 + ChatColor.AQUA + event.category().title() + where;
+        String whose = primary == null || primary.attribution() == null
+                ? null
+                : ChatColor.DARK_GRAY + "           " + primary.attribution();
 
         for (Player player : getServer().getOnlinePlayers()) {
             if (player.hasPermission("ticksentry.alerts")) {
                 player.sendMessage(headline);
+                if (whose != null) {
+                    player.sendMessage(whose);
+                }
             }
         }
     }
@@ -352,6 +368,16 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** @return the profiler timing other plugins' event handlers */
     public PluginProfiler pluginProfiler() {
         return pluginProfiler;
+    }
+
+    /** @return the tracker of who was last seen in which chunk */
+    public ChunkVisitors chunkVisitors() {
+        return chunkVisitors;
+    }
+
+    /** @return the soft hooks into land protection plugins */
+    public RegionLookup regionLookup() {
+        return regionLookup;
     }
 
     /** @return the soft hook into spark (may be unavailable) */

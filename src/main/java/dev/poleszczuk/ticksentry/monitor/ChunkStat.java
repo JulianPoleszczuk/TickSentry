@@ -21,6 +21,7 @@ public final class ChunkStat {
     private final int playerCount;
     private final Map<String, Integer> entityTypeCounts;
     private final Map<String, Integer> tileTypeCounts;
+    private final String attribution;
 
     /**
      * @param worldName        name of the world holding the chunk
@@ -32,6 +33,21 @@ public final class ChunkStat {
      */
     public ChunkStat(String worldName, int chunkX, int chunkZ, int playerCount,
                      Map<String, Integer> entityTypeCounts, Map<String, Integer> tileTypeCounts) {
+        this(worldName, chunkX, chunkZ, playerCount, entityTypeCounts, tileTypeCounts, null);
+    }
+
+    /**
+     * @param worldName        name of the world holding the chunk
+     * @param chunkX           chunk X coordinate
+     * @param chunkZ           chunk Z coordinate
+     * @param playerCount      number of players inside the chunk
+     * @param entityTypeCounts entity counts broken down by type
+     * @param tileTypeCounts   block entity counts broken down by type
+     * @param attribution      who the place belongs to, or {@code null} when unknown
+     */
+    public ChunkStat(String worldName, int chunkX, int chunkZ, int playerCount,
+                     Map<String, Integer> entityTypeCounts, Map<String, Integer> tileTypeCounts,
+                     String attribution) {
         this.worldName = worldName;
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
@@ -40,6 +56,7 @@ public final class ChunkStat {
         this.tileTypeCounts = Map.copyOf(tileTypeCounts);
         this.entityCount = sum(this.entityTypeCounts);
         this.tileEntityCount = sum(this.tileTypeCounts);
+        this.attribution = attribution;
     }
 
     private static int sum(Map<String, Integer> counts) {
@@ -116,6 +133,25 @@ public final class ChunkStat {
                 .max(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue)
                         .thenComparing(Map.Entry::getKey, Comparator.reverseOrder()))
                 .orElse(null);
+    }
+
+    /**
+     * @return who the place belongs to (a claim, a region, or the last player seen there),
+     *         or {@code null} when nothing is known
+     */
+    public String attribution() {
+        return attribution;
+    }
+
+    /**
+     * Copies this snapshot with an attribution line attached.
+     *
+     * @param attribution description of who the place belongs to
+     * @return a new snapshot; this one is left untouched
+     */
+    public ChunkStat withAttribution(String attribution) {
+        return new ChunkStat(worldName, chunkX, chunkZ, playerCount,
+                entityTypeCounts, tileTypeCounts, attribution);
     }
 
     /** @return readable location, for example {@code world @ 120, 344} */

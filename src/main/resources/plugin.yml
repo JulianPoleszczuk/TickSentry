@@ -5,7 +5,10 @@ api-version: '1.16'
 description: Continuous server performance monitoring with automatic lag source detection and Discord alerts.
 author: Julian Poleszczuk
 website: https://github.com/JulianPoleszczuk/TickSentry
-softdepend: [spark, PlaceholderAPI]
+# All optional. spark and PlaceholderAPI add detail; the three protection plugins let alerts
+# name whose land a suspicious chunk sits on. Every hook is reflective, so a missing plugin
+# costs nothing.
+softdepend: [spark, PlaceholderAPI, WorldGuard, GriefPrevention, Towny]
 
 # Paper downloads this library itself on first start - it does not have to sit in the jar.
 libraries:

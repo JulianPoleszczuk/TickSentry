@@ -20,6 +20,8 @@ Suggestion: Go there (/tp 1608 ~ 1608). Suspected farm: 841x cow.
   stays slow for a while.
 - Finds the chunk causing the problem and tells you what is in it.
 - Names the cause: a mob farm, dropped items, hoppers, a crowd of players, or too many entities.
+- Tells you **whose** it is, by asking WorldGuard, GriefPrevention or Towny who owns the land -
+  and, when none of them is installed, who was last standing there.
 - Times every other plugin's event handlers, so it can name the plugin that is eating the tick
   instead of blaming a chunk that did nothing wrong.
 - Watches memory too, so it can tell you when the freeze came from the garbage collector or from
@@ -204,6 +206,25 @@ These work if you have PlaceholderAPI installed:
 | `%ticksentry_last_category%` | what caused the last incident |
 | `%ticksentry_incidents_24h%` | incidents in the last day |
 
+## Whose farm is it
+
+Coordinates only tell you where to walk. On a server with players the question is whose build it
+is, so every chunk in a report gets an owner attached when one can be worked out:
+
+```
+ - world @ 1608, 1608 (entities: 1292, block entities: 0)
+   region "ironfarm" (Steve); last player there: Notch, 4 min ago
+```
+
+Two sources feed this. If **WorldGuard**, **GriefPrevention** or **Towny** is installed, it is
+asked who owns the ground - that is the real answer. If none of them is, TickSentry falls back
+to who was last seen standing in that chunk, which is a hint rather than proof but works on a
+server with no claim plugin at all. Visits older than a day are ignored.
+
+None of the three is a dependency. The hooks are reflective, so a missing plugin costs nothing
+and a plugin that changes its API costs one line of extra detail, never an error. Lookups run
+only for the handful of chunks that made it into a report.
+
 ## Finding the plugin that is at fault
 
 Not every slowdown comes from the world. Sometimes one plugin simply does too much work in an
@@ -304,7 +325,7 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 64 of them and none need a fake server.
+Run the tests with `./gradlew test`. There are 70 of them and none need a fake server.
 
 Every push runs the same build on GitHub Actions, which also checks that the jar is still Java 11
 bytecode - so nobody can break 1.16 support by accident.

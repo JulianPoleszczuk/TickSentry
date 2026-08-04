@@ -44,22 +44,25 @@ public final class ChunkHotspotScanner {
     private final SparkBridge spark;
     private final MemoryWatcher memory;
     private final PluginProfiler profiler;
+    private final ChunkAttribution attribution;
     private boolean scanning;
 
     /**
-     * @param plugin   plugin instance (server and scheduler access)
-     * @param config   source of ignored worlds and the result limit
-     * @param spark    optional source of extra statistics
-     * @param memory   memory and garbage collector readings
-     * @param profiler per-plugin event handler timings
+     * @param plugin      plugin instance (server and scheduler access)
+     * @param config      source of ignored worlds and the result limit
+     * @param spark       optional source of extra statistics
+     * @param memory      memory and garbage collector readings
+     * @param profiler    per-plugin event handler timings
+     * @param attribution works out who the suspicious chunks belong to
      */
     public ChunkHotspotScanner(Plugin plugin, ConfigManager config, SparkBridge spark,
-                               MemoryWatcher memory, PluginProfiler profiler) {
+                               MemoryWatcher memory, PluginProfiler profiler, ChunkAttribution attribution) {
         this.plugin = plugin;
         this.config = config;
         this.spark = spark;
         this.memory = memory;
         this.profiler = profiler;
+        this.attribution = attribution;
     }
 
     /** @return {@code true} while a scan is in progress */
@@ -173,7 +176,10 @@ public final class ChunkHotspotScanner {
         }
 
         private void finish() {
-            List<ChunkStat> top = HotspotAnalyzer.topChunks(stats, config.topChunksCount(), config.costWeights());
+            // Only the chunks that made the report get an owner looked up - doing it for all
+            // several hundred scanned chunks would cost far more than the scan itself.
+            List<ChunkStat> top = attribution.attach(
+                    HotspotAnalyzer.topChunks(stats, config.topChunksCount(), config.costWeights()));
             long durationMs = (System.nanoTime() - startNanos) / 1_000_000L;
             plugin.getLogger().fine("Scanned " + scannedChunks + " chunks across " + ticksUsed
                     + " ticks (" + durationMs + " ms wall clock).");
