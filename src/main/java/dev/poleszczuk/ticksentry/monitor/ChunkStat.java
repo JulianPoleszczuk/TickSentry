@@ -22,6 +22,7 @@ public final class ChunkStat {
     private final Map<String, Integer> entityTypeCounts;
     private final Map<String, Integer> tileTypeCounts;
     private final String attribution;
+    private final String historyNote;
 
     /**
      * @param worldName        name of the world holding the chunk
@@ -33,7 +34,7 @@ public final class ChunkStat {
      */
     public ChunkStat(String worldName, int chunkX, int chunkZ, int playerCount,
                      Map<String, Integer> entityTypeCounts, Map<String, Integer> tileTypeCounts) {
-        this(worldName, chunkX, chunkZ, playerCount, entityTypeCounts, tileTypeCounts, null);
+        this(worldName, chunkX, chunkZ, playerCount, entityTypeCounts, tileTypeCounts, null, null);
     }
 
     /**
@@ -44,10 +45,12 @@ public final class ChunkStat {
      * @param entityTypeCounts entity counts broken down by type
      * @param tileTypeCounts   block entity counts broken down by type
      * @param attribution      who the place belongs to, or {@code null} when unknown
+     * @param historyNote      how often this chunk has offended before, or {@code null}
      */
     public ChunkStat(String worldName, int chunkX, int chunkZ, int playerCount,
                      Map<String, Integer> entityTypeCounts, Map<String, Integer> tileTypeCounts,
-                     String attribution) {
+                     String attribution, String historyNote) {
+        this.historyNote = historyNote;
         this.worldName = worldName;
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
@@ -151,7 +154,26 @@ public final class ChunkStat {
      */
     public ChunkStat withAttribution(String attribution) {
         return new ChunkStat(worldName, chunkX, chunkZ, playerCount,
-                entityTypeCounts, tileTypeCounts, attribution);
+                entityTypeCounts, tileTypeCounts, attribution, historyNote);
+    }
+
+    /**
+     * @return how often this chunk has been behind past incidents, or {@code null} when it is
+     *         the first time it has come up
+     */
+    public String historyNote() {
+        return historyNote;
+    }
+
+    /**
+     * Copies this snapshot with a note about its past attached.
+     *
+     * @param historyNote description of how often the chunk has offended before
+     * @return a new snapshot; this one is left untouched
+     */
+    public ChunkStat withHistory(String historyNote) {
+        return new ChunkStat(worldName, chunkX, chunkZ, playerCount,
+                entityTypeCounts, tileTypeCounts, attribution, historyNote);
     }
 
     /** @return readable location, for example {@code world @ 120, 344} */

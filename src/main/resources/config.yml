@@ -49,6 +49,10 @@ storage:
   enabled: true
   # After how many days old entries are deleted (0 = keep everything).
   keep-days: 30
+  # How far back to look when deciding whether a chunk is a repeat offender. A chunk named by
+  # several incidents inside this window is a standing problem, not a coincidence, and alerts
+  # say so. Also the default period for /lagwatch offenders.
+  offender-days: 7
 
 dashboard:
   # Web panel with a chart and an incident list, viewable in a browser.

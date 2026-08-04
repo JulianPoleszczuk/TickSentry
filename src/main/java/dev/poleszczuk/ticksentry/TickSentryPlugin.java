@@ -17,6 +17,7 @@ import dev.poleszczuk.ticksentry.monitor.TickMonitor;
 import dev.poleszczuk.ticksentry.placeholders.TickSentryExpansion;
 import dev.poleszczuk.ticksentry.storage.AlertStore;
 import dev.poleszczuk.ticksentry.storage.MemoryAlertStore;
+import dev.poleszczuk.ticksentry.storage.OffenderIndex;
 import dev.poleszczuk.ticksentry.storage.SqliteAlertStore;
 import dev.poleszczuk.ticksentry.storage.StoredIncident;
 import dev.poleszczuk.ticksentry.web.DashboardServer;
@@ -53,6 +54,9 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** How many incidents the web panel shows. */
     private static final int DASHBOARD_INCIDENTS_SHOWN = 20;
 
+    /** How many repeat offenders are kept in the cached ranking. */
+    private static final int OFFENDERS_TRACKED = 25;
+
     /** How often (in ticks) memory and the garbage collector are read (5 seconds). */
     private static final long MEMORY_POLL_TICKS = 20L * 5L;
 
@@ -79,6 +83,7 @@ public final class TickSentryPlugin extends JavaPlugin {
 
     private volatile int incidentsLast24h;
     private volatile LagCategory lastCategory;
+    private volatile OffenderIndex offenderIndex = OffenderIndex.empty();
 
     @Override
     public void onEnable() {
@@ -91,7 +96,7 @@ public final class TickSentryPlugin extends JavaPlugin {
         this.chunkVisitors = new ChunkVisitors();
         this.regionLookup = new RegionLookup(this);
         this.scanner = new ChunkHotspotScanner(this, configManager, sparkBridge, memoryWatcher, pluginProfiler,
-                new ChunkAttribution(this, chunkVisitors, regionLookup));
+                new ChunkAttribution(this, chunkVisitors, regionLookup, this::offenderIndex));
         getServer().getPluginManager().registerEvents(chunkVisitors, this);
         this.webhook = new DiscordWebhookClient(this, configManager);
         this.tickMonitor = new TickMonitor(this, configManager, this::handleSustainedLag, this::handleRecovery);
@@ -187,9 +192,21 @@ public final class TickSentryPlugin extends JavaPlugin {
         }
     }
 
-    /** Refreshes the 24 h incident counter - placeholders cannot query the database themselves. */
+    /**
+     * Refreshes the numbers an alert has to have ready the instant it fires.
+     *
+     * <p>Both come from the database, and an alert is assembled on the main thread, which must
+     * never wait on a read. So they are fetched in the background and cached.</p>
+     */
     private void refreshCounters() {
         alertStore.stats(1, stats -> this.incidentsLast24h = stats.total());
+        alertStore.offenders(configManager.offenderDays(), OFFENDERS_TRACKED,
+                offenders -> this.offenderIndex = OffenderIndex.of(offenders));
+    }
+
+    /** @return the current repeat offender ranking, never {@code null} */
+    public OffenderIndex offenderIndex() {
+        return offenderIndex;
     }
 
     /**
@@ -273,6 +290,9 @@ public final class TickSentryPlugin extends JavaPlugin {
             getLogger().warning(" - " + stat.prettyLocation()
                     + " (entities: " + stat.entityCount() + ", block entities: " + stat.tileEntityCount() + ")"
                     + (stat.attribution() == null ? "" : " - " + stat.attribution()));
+            if (stat.historyNote() != null) {
+                getLogger().warning("   This chunk is a repeat offender: " + stat.historyNote() + ".");
+            }
         }
         if (event.memoryNote() != null) {
             getLogger().warning("Memory: " + event.memoryNote());

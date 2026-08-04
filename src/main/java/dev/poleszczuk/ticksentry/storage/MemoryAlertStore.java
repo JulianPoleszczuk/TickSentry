@@ -68,8 +68,25 @@ public final class MemoryAlertStore implements AlertStore {
     }
 
     @Override
+    public void offenders(int days, int limit, Consumer<List<RepeatOffender>> callback) {
+        callback.accept(RepeatOffender.summarise(since(days), days, limit));
+    }
+
+    @Override
     public String describe() {
         return "memory (lost on restart)";
+    }
+
+    /** @return every remembered incident no older than the given number of days */
+    private List<StoredIncident> since(int days) {
+        Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
+        List<StoredIncident> result = new ArrayList<>();
+        for (StoredIncident incident : snapshot(Integer.MAX_VALUE)) {
+            if (!incident.timestamp().isBefore(since)) {
+                result.add(incident);
+            }
+        }
+        return result;
     }
 
     @Override

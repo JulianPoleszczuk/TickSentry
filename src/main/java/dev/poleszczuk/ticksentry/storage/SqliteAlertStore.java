@@ -188,8 +188,38 @@ public final class SqliteAlertStore implements AlertStore {
     }
 
     @Override
+    public void offenders(int days, int limit, Consumer<List<RepeatOffender>> callback) {
+        executor.execute(() -> {
+            List<RepeatOffender> result = List.of();
+            try {
+                // Folded in Java rather than with GROUP BY on purpose: the same code then decides
+                // what counts as a repeat offender here and in the in-memory fallback, and the
+                // window holds hundreds of rows at most.
+                result = RepeatOffender.summarise(readSince(days), days, limit);
+            } catch (SQLException ex) {
+                plugin.getLogger().log(Level.WARNING, "Could not look for repeat offenders", ex);
+            }
+            backToMainThread(callback, result);
+        });
+    }
+
+    @Override
     public String describe() {
         return "SQLite (" + file.getName() + ")";
+    }
+
+    /** Reads every incident inside the window. Runs on the storage thread. */
+    private List<StoredIncident> readSince(int days) throws SQLException {
+        List<StoredIncident> result = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(SELECT_SINCE)) {
+            statement.setLong(1, Instant.now().minus(days, ChronoUnit.DAYS).toEpochMilli());
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    result.add(read(rows));
+                }
+            }
+        }
+        return result;
     }
 
     @Override

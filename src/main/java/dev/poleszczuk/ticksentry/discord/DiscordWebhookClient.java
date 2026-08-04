@@ -222,6 +222,11 @@ public final class DiscordWebhookClient {
             embed.field("Where to look", describe(primary), true);
         }
 
+        if (primary != null && primary.historyNote() != null) {
+            embed.field("Not the first time", "This chunk was already " + primary.historyNote()
+                    + ". Fixing it once would stop this coming back.", false);
+        }
+
         embed.field("What to do", event.suggestedAction(), false);
 
         if (event.pluginNote() != null) {

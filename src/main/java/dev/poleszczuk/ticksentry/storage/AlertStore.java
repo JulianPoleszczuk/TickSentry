@@ -37,6 +37,15 @@ public interface AlertStore {
      */
     void stats(int days, Consumer<IncidentStats> callback);
 
+    /**
+     * Finds the chunks that have been behind more than one incident.
+     *
+     * @param days     how many days back to analyse
+     * @param limit    maximum number of results
+     * @param callback receiver of the ranking (main thread), most frequent first
+     */
+    void offenders(int days, int limit, Consumer<List<RepeatOffender>> callback);
+
     /** @return short description of the store type, shown in {@code /lagwatch status} */
     String describe();
 

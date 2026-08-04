@@ -8,6 +8,7 @@ import dev.poleszczuk.ticksentry.monitor.PluginProfiler;
 import dev.poleszczuk.ticksentry.monitor.PluginReport;
 import dev.poleszczuk.ticksentry.monitor.PluginTiming;
 import dev.poleszczuk.ticksentry.monitor.TickMonitor;
+import dev.poleszczuk.ticksentry.storage.RepeatOffender;
 import dev.poleszczuk.ticksentry.storage.StoredIncident;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
@@ -31,7 +32,7 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
 
     private static final String PERMISSION = "ticksentry.admin";
     private static final List<String> SUBCOMMANDS =
-            List.of("status", "report", "plugins", "history", "stats", "reload");
+            List.of("status", "report", "plugins", "history", "offenders", "stats", "reload");
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
     private static final DateTimeFormatter DATE_TIME =
             DateTimeFormatter.ofPattern("dd.MM HH:mm").withZone(ZoneId.systemDefault());
@@ -44,6 +45,9 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
 
     /** How many plugins {@code /lagwatch plugins} lists. */
     private static final int PLUGINS_SHOWN = 5;
+
+    /** How many chunks {@code /lagwatch offenders} lists. */
+    private static final int OFFENDERS_SHOWN = 8;
 
     private final TickSentryPlugin plugin;
 
@@ -75,6 +79,10 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
             case "history":
                 showHistory(sender);
                 break;
+            case "offenders":
+                showOffenders(sender, args.length > 1
+                        ? parseDays(args) : plugin.configManager().offenderDays());
+                break;
             case "stats":
                 showStats(sender, parseDays(args));
                 break;
@@ -83,7 +91,7 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                 break;
             default:
                 sender.sendMessage(ChatColor.RED + "Usage: /" + label
-                        + " <status|report|plugins|history|stats|reload>");
+                        + " <status|report|plugins|history|offenders|stats|reload>");
                 break;
         }
         return true;
@@ -169,6 +177,9 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                         + stat.tileEntityCount() + " block entities" + describeDominant(stat));
                 if (stat.attribution() != null) {
                     sender.sendMessage(ChatColor.DARK_GRAY + "    " + stat.attribution());
+                }
+                if (stat.historyNote() != null) {
+                    sender.sendMessage(ChatColor.YELLOW + "    repeat offender: " + stat.historyNote());
                 }
             }
             sender.sendMessage(ChatColor.YELLOW + event.suggestedAction());
@@ -259,6 +270,36 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         });
     }
 
+    /**
+     * Prints the chunks that keep coming back.
+     *
+     * <p>This is the difference between a farm somebody built ten minutes ago and one that has
+     * been dragging the server down every evening for a week.</p>
+     */
+    private void showOffenders(CommandSender sender, int days) {
+        plugin.alertStore().offenders(days, OFFENDERS_SHOWN, offenders -> {
+            header(sender, "Repeat offenders (" + days + " days)");
+            if (offenders.isEmpty()) {
+                sender.sendMessage(ChatColor.GREEN
+                        + "No chunk has been behind more than one incident - nothing here is a standing problem.");
+                return;
+            }
+            int index = 1;
+            for (RepeatOffender offender : offenders) {
+                sender.sendMessage(ChatColor.DARK_GRAY + " " + index++ + ". "
+                        + (offender.isChronic() ? ChatColor.RED : ChatColor.YELLOW) + offender.prettyLocation()
+                        + ChatColor.GRAY + " - " + offender.describe()
+                        + ChatColor.DARK_GRAY + ", last " + ago(offender.lastSeen()) + " ago");
+            }
+            RepeatOffender worst = offenders.get(0);
+            if (worst.isChronic()) {
+                sender.sendMessage(ChatColor.YELLOW + "Start with " + worst.prettyLocation()
+                        + " - fixing that one place would have prevented most of these. /tp "
+                        + worst.blockX() + " ~ " + worst.blockZ());
+            }
+        });
+    }
+
     /** Prints an incident summary: how many, caused by what, and at which hour most often. */
     private void showStats(CommandSender sender, int days) {
         plugin.alertStore().stats(days, stats -> {
@@ -344,7 +385,15 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
     private static String ago(Instant instant) {
         Duration duration = Duration.between(instant, Instant.now());
         long minutes = duration.toMinutes();
-        return minutes < 1L ? duration.toSeconds() + " s" : minutes + " min";
+        if (minutes < 1L) {
+            return duration.getSeconds() + " s";
+        }
+        if (minutes < 60L) {
+            return minutes + " min";
+        }
+        // Repeat offenders reach back days, where "4310 min" tells nobody anything.
+        long hours = duration.toHours();
+        return hours < 48L ? hours + " h" : duration.toDays() + " d";
     }
 
     @Override
@@ -359,7 +408,7 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         if (args.length == 2 && "report".equalsIgnoreCase(args[0])) {
             return List.of("discord");
         }
-        if (args.length == 2 && "stats".equalsIgnoreCase(args[0])) {
+        if (args.length == 2 && ("stats".equalsIgnoreCase(args[0]) || "offenders".equalsIgnoreCase(args[0]))) {
             return List.of("1", "7", "30");
         }
         return List.of();

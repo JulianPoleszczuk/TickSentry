@@ -70,6 +70,7 @@ handy if you want moderators warned without giving them the commands.
 | `/lagwatch report discord` | same, but also sends it to Discord (good for testing your webhook) |
 | `/lagwatch plugins` | shows which plugins spent the most time in their event handlers |
 | `/lagwatch history` | shows past incidents, even from before a restart |
+| `/lagwatch offenders` | shows the chunks that keep causing incidents, not just the last one |
 | `/lagwatch stats` | shows a summary: how many incidents, what caused them, at what time of day |
 | `/lagwatch reload` | loads the settings file again |
 
@@ -108,6 +109,7 @@ scan:
 storage:
   enabled: true              # save incidents to a file so they survive a restart
   keep-days: 30              # delete anything older than this (0 = keep forever)
+  offender-days: 7           # window for deciding which chunks keep coming back
 
 dashboard:
   enabled: false             # the web page
@@ -225,6 +227,24 @@ None of the three is a dependency. The hooks are reflective, so a missing plugin
 and a plugin that changes its API costs one line of extra detail, never an error. Lookups run
 only for the handful of chunks that made it into a report.
 
+## The same chunk, over and over
+
+One alert cannot tell a farm somebody built ten minutes ago from the farm that has been dragging
+your server down every evening for a fortnight. The incidents are already in the database, so
+TickSentry looks:
+
+```
+ - world @ 1608, 1608 (entities: 1292, block entities: 0)
+   repeat offender: behind 7 of the last 12 incidents (worst 240 ms)
+```
+
+`/lagwatch offenders` shows the whole ranking, and takes a number of days like `stats` does. A
+chunk named by several incidents in a row is where your evening goes - fixing that one place is
+worth more than reacting to ten alerts.
+
+Only automatic incidents count. Running `/lagwatch report` five times while testing something
+would otherwise turn whatever chunk happened to be busiest into a "chronic problem".
+
 ## Finding the plugin that is at fault
 
 Not every slowdown comes from the world. Sometimes one plugin simply does too much work in an
@@ -325,7 +345,7 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 70 of them and none need a fake server.
+Run the tests with `./gradlew test`. There are 85 of them and none need a fake server.
 
 Every push runs the same build on GitHub Actions, which also checks that the jar is still Java 11
 bytecode - so nobody can break 1.16 support by accident.

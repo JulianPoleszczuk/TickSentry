@@ -1,10 +1,12 @@
 package dev.poleszczuk.ticksentry.monitor;
 
+import dev.poleszczuk.ticksentry.storage.OffenderIndex;
 import org.bukkit.World;
 import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Turns "there are 1200 cows at 1608, 1608" into "…and it is Steve's farm".
@@ -25,20 +27,24 @@ public final class ChunkAttribution {
     private final Plugin plugin;
     private final ChunkVisitors visitors;
     private final RegionLookup regions;
+    private final Supplier<OffenderIndex> offenders;
 
     /**
-     * @param plugin   plugin instance, used to resolve worlds
-     * @param visitors tracker of who was last seen where
-     * @param regions  soft hooks into land protection plugins
+     * @param plugin    plugin instance, used to resolve worlds
+     * @param visitors  tracker of who was last seen where
+     * @param regions   soft hooks into land protection plugins
+     * @param offenders source of the current repeat offender ranking
      */
-    public ChunkAttribution(Plugin plugin, ChunkVisitors visitors, RegionLookup regions) {
+    public ChunkAttribution(Plugin plugin, ChunkVisitors visitors, RegionLookup regions,
+                            Supplier<OffenderIndex> offenders) {
         this.plugin = plugin;
         this.visitors = visitors;
         this.regions = regions;
+        this.offenders = offenders;
     }
 
     /**
-     * Copies the given chunks with an attribution line attached where one could be worked out.
+     * Copies the given chunks with an owner and a track record attached where they are known.
      *
      * @param stats chunks that made it into a report
      * @return the same chunks in the same order, annotated
@@ -47,10 +53,19 @@ public final class ChunkAttribution {
         if (stats.isEmpty()) {
             return stats;
         }
+        OffenderIndex index = offenders.get();
         List<ChunkStat> annotated = new ArrayList<>(stats.size());
         for (ChunkStat stat : stats) {
-            String note = describe(stat);
-            annotated.add(note == null ? stat : stat.withAttribution(note));
+            ChunkStat result = stat;
+            String owner = describe(stat);
+            if (owner != null) {
+                result = result.withAttribution(owner);
+            }
+            String record = index.describe(stat.worldName(), stat.blockX(), stat.blockZ());
+            if (record != null) {
+                result = result.withHistory(record);
+            }
+            annotated.add(result);
         }
         return annotated;
     }
