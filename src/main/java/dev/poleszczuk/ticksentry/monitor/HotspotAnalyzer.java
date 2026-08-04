@@ -1,5 +1,7 @@
 package dev.poleszczuk.ticksentry.monitor;
 
+import dev.poleszczuk.ticksentry.config.Messages;
+
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -222,60 +224,123 @@ public final class HotspotAnalyzer {
      * @return one-sentence suggested action
      */
     public static String suggestedAction(ChunkStat stat, LagCategory category) {
+        return suggestedAction(stat, category, Messages.none());
+    }
+
+    /**
+     * Builds a hint for the admin, translated where {@code messages.yml} provides a translation.
+     *
+     * <p>Each branch computes its English sentence either way. That is deliberate: the English
+     * lives here and only here, so there is no second copy in {@code messages.yml} to fall out
+     * of step with this one.</p>
+     *
+     * @param stat     chunk snapshot
+     * @param category category produced by {@link #categorize(ChunkStat)}
+     * @param messages translation lookup; {@link Messages#none()} keeps everything English
+     * @return one-sentence suggested action
+     */
+    public static String suggestedAction(ChunkStat stat, LagCategory category, Messages messages) {
         String tp = "/tp " + stat.blockX() + " ~ " + stat.blockZ();
         Map.Entry<String, Integer> dominantEntity = stat.dominantEntityType();
         Map.Entry<String, Integer> dominantTile = stat.dominantTileType();
 
         switch (category) {
             case MOB_FARM:
-                return dominantEntity == null
-                        ? "Go there (" + tp + ") and see what piled up."
-                        : "Go there (" + tp + "). Suspected farm: " + dominantEntity.getValue() + "x "
-                        + friendly(dominantEntity.getKey()) + ". Quick fix: "
-                        + killCommand(stat, dominantEntity.getKey());
+                if (dominantEntity == null) {
+                    return text(messages, "advice.mob-farm-unknown",
+                            "Go there (" + tp + ") and see what piled up.", "tp", tp);
+                }
+                return text(messages, "advice.mob-farm",
+                        "Go there (" + tp + "). Suspected farm: " + dominantEntity.getValue() + "x "
+                                + friendly(dominantEntity.getKey()) + ". Quick fix: "
+                                + killCommand(stat, dominantEntity.getKey()),
+                        "tp", tp,
+                        "count", String.valueOf(dominantEntity.getValue()),
+                        "type", friendly(dominantEntity.getKey()),
+                        "kill", killCommand(stat, dominantEntity.getKey()));
             case ITEM_CLUTTER:
-                return "Clear the dropped items: " + killCommand(stat, "item")
-                        + " (run " + tp + " first to see whose they are).";
+                return text(messages, "advice.item-clutter",
+                        "Clear the dropped items: " + killCommand(stat, "item")
+                                + " (run " + tp + " first to see whose they are).",
+                        "tp", tp, "kill", killCommand(stat, "item"));
             case REDSTONE:
-                return dominantTile == null
-                        ? "Check the redstone build at this spot (" + tp + ")."
-                        : "Check the redstone build (" + tp + "): " + dominantTile.getValue() + "x "
-                        + friendly(dominantTile.getKey())
-                        + ". Hoppers are worth reducing or replacing with water streams.";
+                if (dominantTile == null) {
+                    return text(messages, "advice.redstone-unknown",
+                            "Check the redstone build at this spot (" + tp + ").", "tp", tp);
+                }
+                return text(messages, "advice.redstone",
+                        "Check the redstone build (" + tp + "): " + dominantTile.getValue() + "x "
+                                + friendly(dominantTile.getKey())
+                                + ". Hoppers are worth reducing or replacing with water streams.",
+                        "tp", tp,
+                        "count", String.valueOf(dominantTile.getValue()),
+                        "type", friendly(dominantTile.getKey()));
             case SPAWNERS:
-                return dominantTile == null
-                        ? "Check the spawners at this spot (" + tp + ")."
-                        : dominantTile.getValue() + " spawners in one chunk (" + tp
-                        + "). Each one keeps checking for room to spawn, whether or not anyone is "
-                        + "using the grinder. Ask the owner to switch some off, or break a few.";
+                if (dominantTile == null) {
+                    return text(messages, "advice.spawners-unknown",
+                            "Check the spawners at this spot (" + tp + ").", "tp", tp);
+                }
+                return text(messages, "advice.spawners",
+                        dominantTile.getValue() + " spawners in one chunk (" + tp
+                                + "). Each one keeps checking for room to spawn, whether or not anyone is "
+                                + "using the grinder. Ask the owner to switch some off, or break a few.",
+                        "tp", tp, "count", String.valueOf(dominantTile.getValue()));
             case MINECARTS:
-                return dominantEntity == null
-                        ? "Check the minecarts at this spot (" + tp + ")."
-                        : dominantEntity.getValue() + "x " + friendly(dominantEntity.getKey()) + " at " + tp
-                        + ". Hopper carts are checked every tick even when empty - a water stream or "
-                        + "fewer carts would do the same job. Quick fix: "
-                        + killCommand(stat, dominantEntity.getKey());
+                if (dominantEntity == null) {
+                    return text(messages, "advice.minecarts-unknown",
+                            "Check the minecarts at this spot (" + tp + ").", "tp", tp);
+                }
+                return text(messages, "advice.minecarts",
+                        dominantEntity.getValue() + "x " + friendly(dominantEntity.getKey()) + " at " + tp
+                                + ". Hopper carts are checked every tick even when empty - a water stream or "
+                                + "fewer carts would do the same job. Quick fix: "
+                                + killCommand(stat, dominantEntity.getKey()),
+                        "tp", tp,
+                        "count", String.valueOf(dominantEntity.getValue()),
+                        "type", friendly(dominantEntity.getKey()),
+                        "kill", killCommand(stat, dominantEntity.getKey()));
             case CHUNK_LOADING:
                 // The chunk load rate carries the advice, so nothing to add from the chunk itself.
-                return "This one is not about a single place - see the chunk loading note below.";
+                return text(messages, "advice.chunk-loading",
+                        "This one is not about a single place - see the chunk loading note below.");
             case PLAYER_CLUSTER:
-                return "There are " + stat.playerCount()
-                        + " players in this chunk - if that is spawn or an event, the lag is expected. Check: "
-                        + tp + ".";
+                return text(messages, "advice.player-cluster",
+                        "There are " + stat.playerCount()
+                                + " players in this chunk - if that is spawn or an event, the lag is expected. "
+                                + "Check: " + tp + ".",
+                        "tp", tp, "count", String.valueOf(stat.playerCount()));
             case ENTITY_OVERLOAD:
-                return "A lot of mixed entities (" + stat.entityCount()
-                        + ") in one chunk. Take a look: " + tp + ".";
+                return text(messages, "advice.entity-overload",
+                        "A lot of mixed entities (" + stat.entityCount()
+                                + ") in one chunk. Take a look: " + tp + ".",
+                        "tp", tp, "count", String.valueOf(stat.entityCount()));
             case MEMORY:
                 // The memory message itself carries the advice, so nothing to add here.
-                return "This one is not about the world - see the memory note below.";
+                return text(messages, "advice.memory",
+                        "This one is not about the world - see the memory note below.");
             case PLUGIN:
                 // Only the plugin report knows which plugin it was, so it writes its own advice.
-                return "This one is not about the world - see the plugin note below.";
+                return text(messages, "advice.plugin",
+                        "This one is not about the world - see the plugin note below.");
             case UNKNOWN:
             default:
-                return "No single chunk stands out - the cause may be outside the game world "
-                        + "(a plugin, world saving, terrain generation). Running the spark profiler is worth a try.";
+                return text(messages, "advice.unknown",
+                        "No single chunk stands out - the cause may be outside the game world "
+                                + "(a plugin, world saving, terrain generation). Running the spark "
+                                + "profiler is worth a try.");
         }
+    }
+
+    /**
+     * @param messages     translation lookup
+     * @param key          key to try
+     * @param english      what to say when the key has no translation
+     * @param replacements alternating placeholder names and values
+     * @return the translated sentence, or the English one
+     */
+    private static String text(Messages messages, String key, String english, String... replacements) {
+        String translated = messages == null ? null : messages.find(key, replacements);
+        return translated == null ? english : translated;
     }
 
     /**

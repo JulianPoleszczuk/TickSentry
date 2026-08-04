@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets;
  * empty line. A {@code messages.yml} written for an older version keeps working when a new key
  * appears, which means an update never silently blanks a message.</p>
  */
-public final class MessageBundle {
+public final class MessageBundle implements Messages {
 
     /** Name of the file, both inside the jar and in the plugin folder. */
     public static final String FILE_NAME = "messages.yml";
@@ -80,6 +80,29 @@ public final class MessageBundle {
         if (template == null) {
             // Showing the key beats showing nothing: it says exactly what to add to the file.
             return ChatColor.RED + "[" + key + "]";
+        }
+        return ChatColor.translateAlternateColorCodes('&', Placeholders.fill(template, replacements));
+    }
+
+    /**
+     * Looks up a message that may not exist.
+     *
+     * <p>This is what the pure analysis classes call. A key with no entry yields {@code null},
+     * and the caller keeps its own English sentence, so the built-in text never has to be
+     * repeated in {@code messages.yml}.</p>
+     *
+     * @param key          dotted key
+     * @param replacements alternating placeholder names and values
+     * @return the translated text, or {@code null} when nothing is configured for the key
+     */
+    @Override
+    public String find(String key, String... replacements) {
+        String template = messages.getString(key);
+        if (template == null) {
+            template = fallback.getString(key);
+        }
+        if (template == null || template.isEmpty()) {
+            return null;
         }
         return ChatColor.translateAlternateColorCodes('&', Placeholders.fill(template, replacements));
     }

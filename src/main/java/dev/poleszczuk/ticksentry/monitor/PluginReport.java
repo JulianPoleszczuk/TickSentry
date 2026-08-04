@@ -1,5 +1,7 @@
 package dev.poleszczuk.ticksentry.monitor;
 
+import dev.poleszczuk.ticksentry.config.Messages;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -117,6 +119,16 @@ public final class PluginReport {
      * @return message for the admin, or {@code null} when no plugin stands out
      */
     public String message() {
+        return message(Messages.none());
+    }
+
+    /**
+     * Sentence describing the worst plugin, translated where one is configured.
+     *
+     * @param messages translation lookup; {@link Messages#none()} keeps it English
+     * @return message for the admin, or {@code null} when no plugin stands out
+     */
+    public String message(Messages messages) {
         PluginTiming worst = worst();
         if (worst == null || !explainsLag()) {
             return null;
@@ -127,7 +139,16 @@ public final class PluginReport {
         if (worst.worstEvent() != null) {
             text.append(String.format(Locale.ROOT, ", mostly in %s", worst.worstEvent()));
         }
-        return text.append(", ").append(worst.calls()).append(" handler calls).").toString();
+        text.append(", ").append(worst.calls()).append(" handler calls).");
+
+        String translated = messages == null ? null : messages.find("plugin-report.message",
+                "plugin", worst.pluginName(),
+                "share", String.format(Locale.ROOT, "%.0f", worst.share(windowNanos) * 100.0D),
+                "seconds", String.format(Locale.ROOT, "%.0f", windowSeconds()),
+                "ms", String.format(Locale.ROOT, "%.0f", worst.totalMs()),
+                "event", worst.worstEvent() == null ? "?" : worst.worstEvent(),
+                "calls", String.valueOf(worst.calls()));
+        return translated == null ? text.toString() : translated;
     }
 
     /**
@@ -136,11 +157,24 @@ public final class PluginReport {
      * @return suggested action, or {@code null} when no plugin stands out
      */
     public String suggestion() {
+        return suggestion(Messages.none());
+    }
+
+    /**
+     * What the admin should do about the worst plugin, translated where one is configured.
+     *
+     * @param messages translation lookup; {@link Messages#none()} keeps it English
+     * @return suggested action, or {@code null} when no plugin stands out
+     */
+    public String suggestion(Messages messages) {
         PluginTiming worst = worst();
         if (worst == null || !explainsLag()) {
             return null;
         }
-        return "Look at " + worst.pluginName() + " first: update it, check its settings, or disable it "
-                + "for a moment to confirm. Counting mobs will not help here.";
+        String translated = messages == null ? null
+                : messages.find("plugin-report.suggestion", "plugin", worst.pluginName());
+        return translated != null ? translated
+                : "Look at " + worst.pluginName() + " first: update it, check its settings, or disable it "
+                  + "for a moment to confirm. Counting mobs will not help here.";
     }
 }

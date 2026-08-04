@@ -510,7 +510,7 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 159 of them and none need a fake server.
+Run the tests with `./gradlew test`. There are 169 of them and none need a fake server.
 
 Every push runs the same build on GitHub Actions, which also checks that the jar is still Java 11
 bytecode - so nobody can break 1.16 support by accident.

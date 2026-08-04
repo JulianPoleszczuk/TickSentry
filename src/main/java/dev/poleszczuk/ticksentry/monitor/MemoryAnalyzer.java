@@ -1,5 +1,6 @@
 package dev.poleszczuk.ticksentry.monitor;
 
+import dev.poleszczuk.ticksentry.config.Messages;
 import dev.poleszczuk.ticksentry.monitor.MemoryProbe.MemorySample;
 
 /**
@@ -34,15 +35,41 @@ public final class MemoryAnalyzer {
      * @return a verdict; never {@code null}
      */
     public static Verdict diagnose(MemorySample sample, long windowMs) {
+        return diagnose(sample, windowMs, Messages.none());
+    }
+
+    /**
+     * Looks at a reading and works out what, if anything, to tell the admin.
+     *
+     * @param sample   memory reading covering the window
+     * @param windowMs length of the window the reading covers, in milliseconds
+     * @param messages translation lookup; {@link Messages#none()} keeps it English
+     * @return a verdict; never {@code null}
+     */
+    public static Verdict diagnose(MemorySample sample, long windowMs, Messages messages) {
         double gcShare = windowMs <= 0L ? 0.0D : (double) sample.collectionMs() / windowMs;
         int heapPercent = sample.usedPercent();
         int gcPercent = (int) Math.round(gcShare * 100.0D);
 
         boolean heapHigh = heapPercent >= HEAP_HIGH_PERCENT;
 
+        long seconds = Math.round(windowMs / 1000.0D);
+        String[] args = {
+            "percent", String.valueOf(gcPercent),
+            "seconds", String.valueOf(seconds),
+            "collections", String.valueOf(sample.collections()),
+            "memory", sample.describe(),
+            "heapPercent", String.valueOf(heapPercent),
+        };
+
         if (gcShare >= GC_SHARE_SERIOUS) {
+            String key = heapHigh ? "memory.gc-serious-heap-full" : "memory.gc-serious";
+            String translated = messages == null ? null : messages.find(key, args);
+            if (translated != null) {
+                return new Verdict(true, translated);
+            }
             String message = "The garbage collector used " + gcPercent + "% of the last "
-                    + Math.round(windowMs / 1000.0D) + " s (" + sample.collections()
+                    + seconds + " s (" + sample.collections()
                     + " collections). The server was frozen for that time. Memory: " + sample.describe() + ".";
             String advice = heapHigh
                     ? "The heap is nearly full, so give the server more RAM (-Xmx) or find what is filling it."
@@ -51,17 +78,20 @@ public final class MemoryAnalyzer {
         }
 
         if (heapHigh) {
-            String message = "Memory is nearly full: " + sample.describe()
-                    + ". The garbage collector will run more and more often, which shows up as freezes."
-                    + " Consider giving the server more RAM (-Xmx).";
+            String translated = messages == null ? null : messages.find("memory.heap-full", args);
+            String message = translated != null ? translated
+                    : "Memory is nearly full: " + sample.describe()
+                      + ". The garbage collector will run more and more often, which shows up as freezes."
+                      + " Consider giving the server more RAM (-Xmx).";
             // A full heap explains a slowdown on its own only once the collector is actually busy.
             return new Verdict(gcShare >= GC_SHARE_NOTABLE, message);
         }
 
         if (gcShare >= GC_SHARE_NOTABLE) {
-            return new Verdict(false, "The garbage collector took " + gcPercent + "% of the last "
-                    + Math.round(windowMs / 1000.0D) + " s, which adds to the delay. Memory: "
-                    + sample.describe() + ".");
+            String translated = messages == null ? null : messages.find("memory.gc-notable", args);
+            return new Verdict(false, translated != null ? translated
+                    : "The garbage collector took " + gcPercent + "% of the last "
+                      + seconds + " s, which adds to the delay. Memory: " + sample.describe() + ".");
         }
 
         return new Verdict(false, null);

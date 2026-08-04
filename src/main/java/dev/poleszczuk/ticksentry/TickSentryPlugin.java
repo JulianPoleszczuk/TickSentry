@@ -122,13 +122,14 @@ public final class TickSentryPlugin extends JavaPlugin {
         this.messages = new MessageBundle(this);
         this.alertStore = openStore();
         this.sparkBridge = new SparkBridge(this);
-        this.memoryWatcher = new MemoryWatcher(MEMORY_POLL_TICKS * 50L);
+        this.memoryWatcher = new MemoryWatcher(MEMORY_POLL_TICKS * 50L, messages);
         this.pluginProfiler = new PluginProfiler(this);
         this.chunkVisitors = new ChunkVisitors();
         this.regionLookup = new RegionLookup(this);
         this.chunkLoadRate = new ChunkLoadRate((int) (MEMORY_POLL_TICKS / 20L));
         this.scanner = new ChunkHotspotScanner(this, configManager, sparkBridge, memoryWatcher, pluginProfiler,
-                new ChunkAttribution(this, chunkVisitors, regionLookup, this::offenderIndex), chunkLoadRate);
+                new ChunkAttribution(this, chunkVisitors, regionLookup, this::offenderIndex),
+                chunkLoadRate, messages);
         getServer().getPluginManager().registerEvents(chunkVisitors, this);
         getServer().getPluginManager().registerEvents(chunkLoadRate, this);
         this.webhook = new DiscordWebhookClient(this, configManager, this::effectiveThresholdMs);

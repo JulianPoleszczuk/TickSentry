@@ -1,6 +1,7 @@
 package dev.poleszczuk.ticksentry.monitor;
 
 import dev.poleszczuk.ticksentry.config.ConfigManager;
+import dev.poleszczuk.ticksentry.config.Messages;
 import org.bukkit.Chunk;
 import org.bukkit.World;
 import org.bukkit.block.BlockState;
@@ -46,6 +47,7 @@ public final class ChunkHotspotScanner {
     private final PluginProfiler profiler;
     private final ChunkAttribution attribution;
     private final ChunkLoadRate chunkLoadRate;
+    private final Messages messages;
     private boolean scanning;
 
     /**
@@ -56,10 +58,12 @@ public final class ChunkHotspotScanner {
      * @param profiler    per-plugin event handler timings
      * @param attribution   works out who the suspicious chunks belong to
      * @param chunkLoadRate how fast chunks are coming into memory
+     * @param messages      translation lookup for the advice sentences
      */
     public ChunkHotspotScanner(Plugin plugin, ConfigManager config, SparkBridge spark,
                                MemoryWatcher memory, PluginProfiler profiler, ChunkAttribution attribution,
-                               ChunkLoadRate chunkLoadRate) {
+                               ChunkLoadRate chunkLoadRate, Messages messages) {
+        this.messages = messages == null ? Messages.none() : messages;
         this.plugin = plugin;
         this.config = config;
         this.spark = spark;
@@ -189,7 +193,7 @@ public final class ChunkHotspotScanner {
                     + " ticks (" + durationMs + " ms wall clock).");
             callback.accept(LagEvent.of(tps, mspt, peakMs, scannedChunks, totalEntities, top,
                     durationMs, manual, spark.summary(), memory.verdict(), config.costWeights(),
-                    profiler.report(config.profilerWindowSeconds()), chunkLoadRate.verdict()));
+                    profiler.report(config.profilerWindowSeconds()), chunkLoadRate.verdict(), messages));
         }
     }
 }

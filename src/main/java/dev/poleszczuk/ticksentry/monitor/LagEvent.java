@@ -1,5 +1,7 @@
 package dev.poleszczuk.ticksentry.monitor;
 
+import dev.poleszczuk.ticksentry.config.Messages;
+
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
@@ -140,6 +142,32 @@ public final class LagEvent {
     }
 
     /**
+     * Assembles an incident, leaving every sentence in English.
+     *
+     * @param tps            one-minute TPS
+     * @param averageMspt    rolling average MSPT
+     * @param peakMs         longest gap between ticks
+     * @param loadedChunks   number of scanned chunks
+     * @param totalEntities  total entity count
+     * @param topChunks      sorted list of suspicious chunks
+     * @param scanDurationMs scan duration
+     * @param manual         whether the scan was manual
+     * @param sparkSummary   spark statistics, or {@code null}
+     * @param memory         what memory looked like, or {@code null} when unknown
+     * @param weights        cost weights used to categorise the chunk
+     * @param plugins        per-plugin event handler timings, never {@code null}
+     * @param chunkLoad      how fast chunks were coming into memory, never {@code null}
+     * @return incident ready to be reported
+     */
+    public static LagEvent of(double tps, double averageMspt, double peakMs, int loadedChunks,
+                              int totalEntities, List<ChunkStat> topChunks, long scanDurationMs,
+                              boolean manual, String sparkSummary, MemoryAnalyzer.Verdict memory,
+                              CostWeights weights, PluginReport plugins, ChunkLoadVerdict chunkLoad) {
+        return of(tps, averageMspt, peakMs, loadedChunks, totalEntities, topChunks, scanDurationMs,
+                manual, sparkSummary, memory, weights, plugins, chunkLoad, Messages.none());
+    }
+
+    /**
      * Assembles an incident from everything the plugin measured.
      *
      * <p>Deciding the cause runs in a fixed order. A plugin that took at least half of the
@@ -161,12 +189,15 @@ public final class LagEvent {
      * @param weights        cost weights used to categorise the chunk
      * @param plugins        per-plugin event handler timings, never {@code null}
      * @param chunkLoad      how fast chunks were coming into memory, never {@code null}
+     * @param messages       translation lookup; {@link Messages#none()} keeps everything English
      * @return incident ready to be reported
      */
     public static LagEvent of(double tps, double averageMspt, double peakMs, int loadedChunks,
                               int totalEntities, List<ChunkStat> topChunks, long scanDurationMs,
                               boolean manual, String sparkSummary, MemoryAnalyzer.Verdict memory,
-                              CostWeights weights, PluginReport plugins, ChunkLoadVerdict chunkLoad) {
+                              CostWeights weights, PluginReport plugins, ChunkLoadVerdict chunkLoad,
+                              Messages messages) {
+        Messages text = messages == null ? Messages.none() : messages;
         PluginReport pluginReport = plugins == null ? PluginReport.empty() : plugins;
         ChunkLoadVerdict loadRate = chunkLoad == null ? ChunkLoadVerdict.quiet() : chunkLoad;
         ChunkStat primary = topChunks.isEmpty() ? null : topChunks.get(0);
@@ -189,18 +220,20 @@ public final class LagEvent {
 
         String action;
         if (category == LagCategory.PLUGIN) {
-            action = pluginReport.suggestion();
+            action = pluginReport.suggestion(text);
         } else if (category == LagCategory.CHUNK_LOADING) {
-            action = loadRate.suggestion();
+            action = loadRate.suggestion(text);
         } else if (primary == null || category == LagCategory.MEMORY) {
-            action = HotspotAnalyzer.suggestedAction(ChunkStat.ofEntities("-", 0, 0, new HashMap<>()), category);
+            action = HotspotAnalyzer.suggestedAction(
+                    ChunkStat.ofEntities("-", 0, 0, new HashMap<>()), category, text);
         } else {
-            action = HotspotAnalyzer.suggestedAction(primary, category);
+            action = HotspotAnalyzer.suggestedAction(primary, category, text);
         }
 
         return new LagEvent(Instant.now(), tps, averageMspt, peakMs, loadedChunks, totalEntities,
                 topChunks, category, action, scanDurationMs, manual, sparkSummary,
-                memory == null ? null : memory.message(), pluginReport.message(), loadRate.message());
+                memory == null ? null : memory.message(), pluginReport.message(text),
+                loadRate.message(text));
     }
 
     /** @return when the incident was detected */

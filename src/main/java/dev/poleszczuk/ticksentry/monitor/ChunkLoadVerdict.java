@@ -1,5 +1,7 @@
 package dev.poleszczuk.ticksentry.monitor;
 
+import dev.poleszczuk.ticksentry.config.Messages;
+
 import java.util.Locale;
 
 /**
@@ -78,10 +80,21 @@ public final class ChunkLoadVerdict {
      * @return one line for the admin, or {@code null} when the numbers are unremarkable
      */
     public String message() {
+        return message(Messages.none());
+    }
+
+    /**
+     * @param messages translation lookup; {@link Messages#none()} keeps it English
+     * @return one line for the admin, or {@code null} when the numbers are unremarkable
+     */
+    public String message(Messages messages) {
         if (!hasMessage()) {
             return null;
         }
-        return String.format(Locale.ROOT,
+        String translated = messages == null ? null : messages.find("chunk-load.message",
+                "loaded", String.format(Locale.ROOT, "%.0f", loadedPerSecond),
+                "generated", String.format(Locale.ROOT, "%.1f", generatedPerSecond));
+        return translated != null ? translated : String.format(Locale.ROOT,
                 "The server is loading %.0f chunks a second, %.1f of them generated from scratch.",
                 loadedPerSecond, generatedPerSecond);
     }
@@ -90,17 +103,29 @@ public final class ChunkLoadVerdict {
      * @return what to do about it, or {@code null} when the numbers are unremarkable
      */
     public String suggestion() {
+        return suggestion(Messages.none());
+    }
+
+    /**
+     * @param messages translation lookup; {@link Messages#none()} keeps it English
+     * @return what to do about it, or {@code null} when the numbers are unremarkable
+     */
+    public String suggestion(Messages messages) {
         if (!hasMessage()) {
             return null;
         }
         if (generatedPerSecond >= GENERATION_NOTABLE) {
-            return "New land is being generated - somebody is exploring, riding an elytra, or a "
-                    + "pregenerator is running. This kind of lag follows the player around and "
-                    + "stops when they do. Pregenerating the world in advance, or lowering the "
-                    + "view distance, is what actually fixes it.";
+            String translated = messages == null ? null : messages.find("chunk-load.generating");
+            return translated != null ? translated
+                    : "New land is being generated - somebody is exploring, riding an elytra, or a "
+                      + "pregenerator is running. This kind of lag follows the player around and "
+                      + "stops when they do. Pregenerating the world in advance, or lowering the "
+                      + "view distance, is what actually fixes it.";
         }
-        return "Chunks are being read from disk fast enough to hurt. That is usually someone "
-                + "moving quickly across explored ground; a lower view distance, or a faster disk, "
-                + "is what helps.";
+        String translated = messages == null ? null : messages.find("chunk-load.streaming");
+        return translated != null ? translated
+                : "Chunks are being read from disk fast enough to hurt. That is usually someone "
+                  + "moving quickly across explored ground; a lower view distance, or a faster disk, "
+                  + "is what helps.";
     }
 }

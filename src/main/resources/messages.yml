@@ -32,6 +32,66 @@ update:
   # Shown to admins on join. Placeholders: {latest} {current} {url}
   available: "&b[TickSentry] &7Version &f{latest}&7 is out (you have {current}). &8{url}"
 
+# The advice sentences - what the plugin tells you to DO about each cause. They show up in the
+# console, in /lagwatch report, and in the Discord alert.
+#
+# These are NOT listed with English values on purpose. The English lives in the code, so there
+# is no second copy here to drift out of step with it. Uncomment a line and write your own to
+# replace it; leave it commented and you keep the built-in English.
+#
+# The placeholders each key accepts are written above it. {kill} is a ready /kill command and
+# {tp} a ready /tp command - keep them if you want people to be able to paste them.
+advice:
+  # {tp} {count} {type} {kill}
+  #mob-farm: "Idź tam ({tp}). Podejrzana farma: {count}x {type}. Szybka naprawa: {kill}"
+  # {tp}
+  #mob-farm-unknown: "Idź tam ({tp}) i zobacz, co się nazbierało."
+  # {tp} {kill}
+  #item-clutter: "Posprzątaj wyrzucone przedmioty: {kill} (najpierw {tp}, żeby zobaczyć czyje)."
+  # {tp} {count} {type}
+  #redstone: "Sprawdź układ redstone ({tp}): {count}x {type}."
+  # {tp}
+  #redstone-unknown: "Sprawdź układ redstone w tym miejscu ({tp})."
+  # {tp} {count}
+  #spawners: "{count} spawnerów w jednym chunku ({tp}). Każdy ciągle szuka miejsca na moba."
+  # {tp}
+  #spawners-unknown: "Sprawdź spawnery w tym miejscu ({tp})."
+  # {tp} {count} {type} {kill}
+  #minecarts: "{count}x {type} przy {tp}. Wagoniki z lejkami tickują nawet puste. Szybka naprawa: {kill}"
+  # {tp}
+  #minecarts-unknown: "Sprawdź wagoniki w tym miejscu ({tp})."
+  # {tp} {count}
+  #player-cluster: "{count} graczy w jednym chunku - jeśli to spawn albo event, lag jest normalny. Sprawdź: {tp}"
+  # {tp} {count}
+  #entity-overload: "Dużo różnych bytów ({count}) w jednym chunku. Zobacz: {tp}"
+  # no placeholders
+  #chunk-loading: "To nie jest kwestia jednego miejsca - patrz notatka o ładowaniu chunków niżej."
+  #memory: "To nie jest kwestia świata - patrz notatka o pamięci niżej."
+  #plugin: "To nie jest kwestia świata - patrz notatka o pluginie niżej."
+  #unknown: "Żaden chunk się nie wyróżnia - przyczyna może być poza światem gry. Warto odpalić spark."
+
+# What the plugin profiler reports. Same rule: uncomment to translate.
+plugin-report:
+  # {plugin} {share} {seconds} {ms} {event} {calls}
+  #message: "{plugin} zużył {share}% ostatnich {seconds} s czasu serwera ({ms} ms, głównie w {event}, {calls} wywołań)."
+  # {plugin}
+  #suggestion: "Zacznij od {plugin}: zaktualizuj, sprawdź ustawienia albo wyłącz na chwilę. Liczenie mobów tu nie pomoże."
+
+# What the memory watcher reports. {percent} {seconds} {collections} {memory} {heapPercent}
+memory:
+  #gc-serious: "Garbage collector zużył {percent}% ostatnich {seconds} s ({collections} zbiórek). Pamięć: {memory}."
+  #gc-serious-heap-full: "Garbage collector zużył {percent}% ostatnich {seconds} s, a sterta jest prawie pełna ({memory}). Daj serwerowi więcej RAM (-Xmx)."
+  #heap-full: "Pamięć prawie pełna: {memory}. Rozważ zwiększenie -Xmx."
+  #gc-notable: "Garbage collector zajął {percent}% ostatnich {seconds} s. Pamięć: {memory}."
+
+# What the chunk load detector reports.
+chunk-load:
+  # {loaded} {generated}
+  #message: "Serwer ładuje {loaded} chunków na sekundę, w tym {generated} generowanych od zera."
+  # no placeholders
+  #generating: "Generuje się nowy teren - ktoś zwiedza, leci na elytrze albo działa pregenerator. Pregeneracja świata albo mniejszy view-distance to realna naprawa."
+  #streaming: "Chunki są czytane z dysku wystarczająco szybko, żeby to bolało. Pomoże mniejszy view-distance albo szybszy dysk."
+
 # Names of the causes. The title is what an alert calls it; the description explains it.
 category:
   MOB_FARM:
