@@ -30,6 +30,8 @@ Suggestion: Go there (/tp 1608 ~ 1608). Suspected farm: 841x cow.
 - Tells admins who are in the game, so you do not have to watch Discord.
 - Saves every incident, so you can ask what time of day your server usually struggles.
 - Has a small web page with a chart, and a /metrics endpoint for Prometheus and Grafana.
+- Can clean up after itself - sweep dropped items, thin out mob pile-ups - but only if you
+  explicitly turn that on. By default it changes nothing.
 
 ## Install
 
@@ -110,6 +112,10 @@ storage:
   enabled: true              # save incidents to a file so they survive a restart
   keep-days: 30              # delete anything older than this (0 = keep forever)
   offender-days: 7           # window for deciding which chunks keep coming back
+
+remediation:
+  enabled: false             # let the plugin remove things? see the section below
+  dry-run: true              # ...and even then, only report at first
 
 dashboard:
   enabled: false             # the web page
@@ -313,6 +319,41 @@ time those from the outside, so that part is a count, not a measurement.
 Turn the whole thing off with `profiler.enabled: false` if you would rather TickSentry touched
 nothing but its own listeners.
 
+## Letting it clean up (off by default)
+
+Everything above only looks. If you want TickSentry to act, it can sweep dropped items and thin
+out mob pile-ups after an incident - but read this first, because it is the one part of the
+plugin that deletes things your players own, and no restart undoes it.
+
+```yaml
+remediation:
+  enabled: false             # nothing happens until you change this
+  dry-run: true              # and it still only reports until you change this too
+  warning-seconds: 30        # players in that world are told first
+  cooldown-seconds: 600
+  clear-items:
+    enabled: true
+    threshold: 300           # dropped items in one chunk
+  cap-mobs:
+    enabled: false           # off even when remediation is on
+    threshold: 300           # mobs of one type in one chunk
+    keep: 50                 # the farm keeps working, it just stops growing
+    protected-types: [VILLAGER, IRON_GOLEM, ...]
+```
+
+Two switches, on purpose. Turning `enabled` on gets you dry-run: the plugin says what it would
+have done and changes nothing. Watch that for a few days, adjust the thresholds, and only then
+set `dry-run: false`.
+
+These are never removed, whatever the numbers say: **named mobs, tamed pets, leashed animals,
+anything riding or being ridden, renamed items**, and any type in `protected-types` (the default
+list covers villagers, golems, horses, pets, item frames, minecarts and boats).
+
+The plan is made from the scan, but never trusted. The world is read again at the moment of
+removal, thirty seconds later, and only what is still there goes. If the chunk unloaded or
+somebody already cleaned up, nothing happens. Whatever does happen is written to the console,
+told to your admins in game, and sent to Discord.
+
 ## What it cannot do
 
 TickSentry looks at **what is inside your world** and at **what your plugins do with the tick**.
@@ -386,7 +427,7 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 96 of them and none need a fake server.
+Run the tests with `./gradlew test`. There are 113 of them and none need a fake server.
 
 Every push runs the same build on GitHub Actions, which also checks that the jar is still Java 11
 bytecode - so nobody can break 1.16 support by accident.

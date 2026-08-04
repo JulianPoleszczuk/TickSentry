@@ -54,6 +54,64 @@ storage:
   # say so. Also the default period for /lagwatch offenders.
   offender-days: 7
 
+# Letting the plugin clean up after itself.
+#
+# READ THIS BEFORE TURNING IT ON. Everything else in TickSentry only looks at your server.
+# This section is the one part that deletes things your players own, and no restart undoes it.
+#
+# It is off by default, and starts in dry-run when you switch it on, so you can watch what it
+# would have done for a few days before letting it act. Players in the affected world are always
+# warned first, and these are never removed, whatever the numbers say:
+#   named mobs, tamed pets, leashed animals, anything riding or being ridden, renamed items,
+#   and any type you list under protected-types.
+remediation:
+  enabled: false
+  # Report what would have happened instead of doing it. Leave this on until you trust it.
+  dry-run: true
+  # How long players are warned before anything disappears.
+  warning-seconds: 30
+  # Never clean up more often than this.
+  cooldown-seconds: 600
+
+  clear-items:
+    enabled: true
+    # Only chunks holding at least this many dropped items and experience orbs.
+    threshold: 300
+
+  cap-mobs:
+    # Off even when remediation is on - killing mobs is a bigger decision than sweeping litter.
+    enabled: false
+    # Only when one type reaches this many in a single chunk.
+    threshold: 300
+    # How many of that type to leave behind. A farm keeps working, it just stops growing.
+    keep: 50
+    # Never removed, however many there are.
+    protected-types:
+      - VILLAGER
+      - WANDERING_TRADER
+      - IRON_GOLEM
+      - SNOWMAN
+      - HORSE
+      - DONKEY
+      - MULE
+      - LLAMA
+      - TRADER_LLAMA
+      - CAT
+      - OCELOT
+      - WOLF
+      - PARROT
+      - ALLAY
+      - AXOLOTL
+      - ARMOR_STAND
+      - ITEM_FRAME
+      - GLOW_ITEM_FRAME
+      - PAINTING
+      - MINECART
+      - CHEST_MINECART
+      - HOPPER_MINECART
+      - FURNACE_MINECART
+      - BOAT
+
 dashboard:
   # Web panel with a chart and an incident list, viewable in a browser.
   # It runs on the same machine as the server - nothing needs hosting anywhere.

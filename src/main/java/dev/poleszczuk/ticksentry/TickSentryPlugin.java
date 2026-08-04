@@ -17,6 +17,7 @@ import dev.poleszczuk.ticksentry.monitor.RegionLookup;
 import dev.poleszczuk.ticksentry.monitor.SparkBridge;
 import dev.poleszczuk.ticksentry.monitor.TickMonitor;
 import dev.poleszczuk.ticksentry.placeholders.TickSentryExpansion;
+import dev.poleszczuk.ticksentry.remedy.AutoRemediation;
 import dev.poleszczuk.ticksentry.storage.AlertStore;
 import dev.poleszczuk.ticksentry.storage.MemoryAlertStore;
 import dev.poleszczuk.ticksentry.storage.OffenderIndex;
@@ -88,6 +89,7 @@ public final class TickSentryPlugin extends JavaPlugin {
     private PluginProfiler pluginProfiler;
     private ChunkVisitors chunkVisitors;
     private RegionLookup regionLookup;
+    private AutoRemediation remediation;
     private DashboardServer dashboard;
 
     private volatile int incidentsLast24h;
@@ -108,6 +110,7 @@ public final class TickSentryPlugin extends JavaPlugin {
                 new ChunkAttribution(this, chunkVisitors, regionLookup, this::offenderIndex));
         getServer().getPluginManager().registerEvents(chunkVisitors, this);
         this.webhook = new DiscordWebhookClient(this, configManager);
+        this.remediation = new AutoRemediation(this, configManager::remedySettings, this::reportRemediation);
         this.tickMonitor = new TickMonitor(this, configManager, this::handleSustainedLag, this::handleRecovery);
         this.tickMonitor.start();
 
@@ -355,6 +358,30 @@ public final class TickSentryPlugin extends JavaPlugin {
         getLogger().warning("Suggestion: " + event.suggestedAction());
         webhook.sendLagAlert(event);
         announceInGame(event);
+        remediation.consider(event);
+    }
+
+    /**
+     * Passes on what the automatic clean-up did, or would have done in dry-run.
+     *
+     * <p>Deleting things players own is not something to do quietly, so it reaches the console,
+     * the admins in game and Discord alike.</p>
+     *
+     * @param summary multi-line description of the actions
+     */
+    private void reportRemediation(String summary) {
+        getLogger().warning(summary);
+        for (Player player : getServer().getOnlinePlayers()) {
+            if (player.hasPermission("ticksentry.alerts")) {
+                player.sendMessage(ChatColor.YELLOW + "[TickSentry] " + ChatColor.GRAY + summary);
+            }
+        }
+        webhook.sendRemediation(summary);
+    }
+
+    /** @return the automatic clean-up, which does nothing unless an admin enabled it */
+    public AutoRemediation remediation() {
+        return remediation;
     }
 
     /**

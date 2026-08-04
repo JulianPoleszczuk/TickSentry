@@ -1,6 +1,7 @@
 package dev.poleszczuk.ticksentry.config;
 
 import dev.poleszczuk.ticksentry.monitor.CostWeights;
+import dev.poleszczuk.ticksentry.remedy.RemedySettings;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.Plugin;
@@ -50,6 +51,7 @@ public final class ConfigManager {
     private volatile String dashboardToken;
     private volatile boolean dashboardMetrics;
     private volatile CostWeights costWeights;
+    private volatile RemedySettings remedySettings = RemedySettings.disabled();
 
     /**
      * Creates the manager and immediately loads the configuration from disk.
@@ -101,6 +103,18 @@ public final class ConfigManager {
                 .map(name -> name.toLowerCase(Locale.ROOT))
                 .collect(Collectors.toUnmodifiableSet());
         this.topChunksCount = Math.min(25, Math.max(1, cfg.getInt("scan.top-chunks-count", 5)));
+
+        this.remedySettings = new RemedySettings(
+                cfg.getBoolean("remediation.enabled", false),
+                cfg.getBoolean("remediation.dry-run", true),
+                cfg.getInt("remediation.warning-seconds", 30),
+                cfg.getInt("remediation.cooldown-seconds", 600),
+                cfg.getBoolean("remediation.clear-items.enabled", true),
+                cfg.getInt("remediation.clear-items.threshold", 300),
+                cfg.getBoolean("remediation.cap-mobs.enabled", false),
+                cfg.getInt("remediation.cap-mobs.threshold", 300),
+                cfg.getInt("remediation.cap-mobs.keep", 50),
+                cfg.getStringList("remediation.cap-mobs.protected-types"));
 
         this.costWeights = CostWeights.withOverrides(
                 readWeights(cfg.getConfigurationSection("weights.entities")),
@@ -246,6 +260,11 @@ public final class ConfigManager {
     /** @return entity and block entity cost weights, with any config overrides applied */
     public CostWeights costWeights() {
         return costWeights;
+    }
+
+    /** @return what, if anything, the plugin is allowed to remove on its own */
+    public RemedySettings remedySettings() {
+        return remedySettings;
     }
 
     /**

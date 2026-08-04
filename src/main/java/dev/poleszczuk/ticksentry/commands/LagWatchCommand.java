@@ -8,6 +8,7 @@ import dev.poleszczuk.ticksentry.monitor.PluginProfiler;
 import dev.poleszczuk.ticksentry.monitor.PluginReport;
 import dev.poleszczuk.ticksentry.monitor.PluginTiming;
 import dev.poleszczuk.ticksentry.monitor.TickMonitor;
+import dev.poleszczuk.ticksentry.remedy.RemedySettings;
 import dev.poleszczuk.ticksentry.storage.RepeatOffender;
 import dev.poleszczuk.ticksentry.storage.StoredIncident;
 import org.bukkit.ChatColor;
@@ -131,6 +132,17 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GRAY + "Spark: " + (spark == null
                 ? ChatColor.DARK_GRAY + "unavailable (using built-in measurements)"
                 : ChatColor.WHITE + spark));
+        RemedySettings remedy = plugin.configManager().remedySettings();
+        if (!remedy.enabled()) {
+            sender.sendMessage(ChatColor.GRAY + "Automatic clean-up: " + ChatColor.DARK_GRAY
+                    + "off (the plugin only looks, it changes nothing)");
+        } else {
+            long remedyCooldown = plugin.remediation().cooldownRemainingSeconds();
+            sender.sendMessage(ChatColor.GRAY + "Automatic clean-up: "
+                    + (remedy.dryRun() ? ChatColor.YELLOW + "dry-run (reports only)" : ChatColor.RED + "ACTIVE")
+                    + (remedyCooldown > 0L ? ChatColor.DARK_GRAY + " - next in " + remedyCooldown + " s" : ""));
+        }
+
         sender.sendMessage(ChatColor.GRAY + "Land protection: " + (plugin.regionLookup().isAvailable()
                 ? ChatColor.GREEN + "hooked - alerts can name an owner"
                 : ChatColor.DARK_GRAY + "none found (falling back to who was last seen there)"));

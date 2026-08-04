@@ -284,8 +284,17 @@ public final class HotspotAnalyzer {
         return DEFAULT_WEIGHTS.tileWeight(tileType);
     }
 
-    private static boolean isItemLike(String type) {
-        return "ITEM".equals(type) || "DROPPED_ITEM".equals(type) || "EXPERIENCE_ORB".equals(type);
+    /**
+     * Tells dropped items and experience orbs apart from mobs.
+     *
+     * <p>Bukkit renamed the dropped item type between versions, so both spellings count.</p>
+     *
+     * @param type entity type name
+     * @return whether the type is litter on the ground rather than a creature
+     */
+    public static boolean isItemLike(String type) {
+        String upper = type.toUpperCase(Locale.ROOT);
+        return "ITEM".equals(upper) || "DROPPED_ITEM".equals(upper) || "EXPERIENCE_ORB".equals(upper);
     }
 
     private static String vanillaId(String type) {

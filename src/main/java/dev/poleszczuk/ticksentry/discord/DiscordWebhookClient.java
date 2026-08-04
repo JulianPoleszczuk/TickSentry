@@ -101,6 +101,31 @@ public final class DiscordWebhookClient {
     }
 
     /**
+     * Reports what the automatic clean-up did, or would have done in dry-run.
+     *
+     * <p>Removing things players own is not something to do quietly, so it gets its own message
+     * rather than a footnote on the incident that triggered it.</p>
+     *
+     * @param summary multi-line description of the actions
+     */
+    public void sendRemediation(String summary) {
+        if (!config.discordEnabled()) {
+            return;
+        }
+        EmbedBuilder embed = new EmbedBuilder()
+                .title("Automatic clean-up")
+                .color(COLOR_NOTICE)
+                .timestamp(java.time.Instant.now())
+                .description(summary)
+                .footer("TickSentry");
+
+        String payload = "{\"username\":\"TickSentry\",\"allowed_mentions\":{\"parse\":[]},\"embeds\":["
+                + embed.toJson() + "]}";
+        String url = config.webhookUrl();
+        executor.execute(() -> post(url, payload));
+    }
+
+    /**
      * Turns a number of seconds into wording like "4 min 12 s".
      *
      * @param seconds duration in seconds
