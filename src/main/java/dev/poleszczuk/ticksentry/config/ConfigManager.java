@@ -40,6 +40,9 @@ public final class ConfigManager {
     private volatile boolean storageEnabled;
     private volatile int storageKeepDays;
 
+    private volatile boolean profilerEnabled;
+    private volatile int profilerWindowSeconds;
+
     private volatile boolean dashboardEnabled;
     private volatile String dashboardBind;
     private volatile int dashboardPort;
@@ -74,6 +77,11 @@ public final class ConfigManager {
 
         this.storageEnabled = cfg.getBoolean("storage.enabled", true);
         this.storageKeepDays = Math.max(0, cfg.getInt("storage.keep-days", 30));
+
+        this.profilerEnabled = cfg.getBoolean("profiler.enabled", true);
+        // Below ~5 s a window holds too few samples to mean anything; above 300 s the profiler
+        // would be reporting on lag that has long since passed.
+        this.profilerWindowSeconds = Math.min(300, Math.max(5, cfg.getInt("profiler.window-seconds", 30)));
 
         this.dashboardEnabled = cfg.getBoolean("dashboard.enabled", false);
         this.dashboardBind = cfg.getString("dashboard.bind", "127.0.0.1").trim();
@@ -189,6 +197,16 @@ public final class ConfigManager {
     /** @return after how many days old incidents are deleted (0 = never) */
     public int storageKeepDays() {
         return storageKeepDays;
+    }
+
+    /** @return whether other plugins' event handlers should be timed */
+    public boolean profilerEnabled() {
+        return profilerEnabled;
+    }
+
+    /** @return how many seconds of handler timings a report covers */
+    public int profilerWindowSeconds() {
+        return profilerWindowSeconds;
     }
 
     /** @return whether the web panel should be started */

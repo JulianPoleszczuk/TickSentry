@@ -244,6 +244,9 @@ public final class HotspotAnalyzer {
             case MEMORY:
                 // The memory message itself carries the advice, so nothing to add here.
                 return "This one is not about the world - see the memory note below.";
+            case PLUGIN:
+                // Only the plugin report knows which plugin it was, so it writes its own advice.
+                return "This one is not about the world - see the plugin note below.";
             case UNKNOWN:
             default:
                 return "No single chunk stands out - the cause may be outside the game world "

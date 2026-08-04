@@ -4,6 +4,9 @@ import dev.poleszczuk.ticksentry.TickSentryPlugin;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
 import dev.poleszczuk.ticksentry.monitor.LagCategory;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
+import dev.poleszczuk.ticksentry.monitor.PluginProfiler;
+import dev.poleszczuk.ticksentry.monitor.PluginReport;
+import dev.poleszczuk.ticksentry.monitor.PluginTiming;
 import dev.poleszczuk.ticksentry.monitor.TickMonitor;
 import dev.poleszczuk.ticksentry.storage.StoredIncident;
 import org.bukkit.ChatColor;
@@ -18,6 +21,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -26,7 +30,8 @@ import java.util.stream.Collectors;
 public final class LagWatchCommand implements CommandExecutor, TabCompleter {
 
     private static final String PERMISSION = "ticksentry.admin";
-    private static final List<String> SUBCOMMANDS = List.of("status", "report", "history", "stats", "reload");
+    private static final List<String> SUBCOMMANDS =
+            List.of("status", "report", "plugins", "history", "stats", "reload");
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
     private static final DateTimeFormatter DATE_TIME =
             DateTimeFormatter.ofPattern("dd.MM HH:mm").withZone(ZoneId.systemDefault());
@@ -36,6 +41,9 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
 
     /** Default period analysed by {@code /lagwatch stats}. */
     private static final int DEFAULT_STATS_DAYS = 7;
+
+    /** How many plugins {@code /lagwatch plugins} lists. */
+    private static final int PLUGINS_SHOWN = 5;
 
     private final TickSentryPlugin plugin;
 
@@ -61,6 +69,9 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
             case "report":
                 showReport(sender, args.length > 1 && "discord".equalsIgnoreCase(args[1]));
                 break;
+            case "plugins":
+                showPlugins(sender);
+                break;
             case "history":
                 showHistory(sender);
                 break;
@@ -72,7 +83,7 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                 break;
             default:
                 sender.sendMessage(ChatColor.RED + "Usage: /" + label
-                        + " <status|report|history|stats|reload>");
+                        + " <status|report|plugins|history|stats|reload>");
                 break;
         }
         return true;
@@ -140,6 +151,11 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
 
         if (event.topChunks().isEmpty()) {
             sender.sendMessage(ChatColor.GREEN + "No chunk stands out - the game world looks calm.");
+            // The world is fine but something else was not, so the advice still has to reach the admin.
+            if (event.category() != LagCategory.UNKNOWN) {
+                sender.sendMessage(ChatColor.GRAY + "Likely cause: " + ChatColor.AQUA + event.category().title());
+                sender.sendMessage(ChatColor.YELLOW + event.suggestedAction());
+            }
         } else {
             sender.sendMessage(ChatColor.GRAY + "Likely cause: " + ChatColor.AQUA + event.category().title());
             int index = 1;
@@ -149,6 +165,9 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                         + stat.tileEntityCount() + " block entities" + describeDominant(stat));
             }
             sender.sendMessage(ChatColor.YELLOW + event.suggestedAction());
+        }
+        if (event.pluginNote() != null) {
+            sender.sendMessage(ChatColor.YELLOW + event.pluginNote());
         }
         if (event.memoryNote() != null) {
             sender.sendMessage(ChatColor.YELLOW + event.memoryNote());
@@ -164,6 +183,51 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
             } else {
                 sender.sendMessage(ChatColor.RED + "Discord is disabled or the webhook URL is empty.");
             }
+        }
+    }
+
+    /** Prints which plugins spent the most time in their event handlers recently. */
+    private void showPlugins(CommandSender sender) {
+        header(sender, "Plugins");
+        PluginProfiler profiler = plugin.pluginProfiler();
+        if (!profiler.isRunning()) {
+            sender.sendMessage(ChatColor.YELLOW + "Profiling is off - set profiler.enabled to true in config.yml.");
+            return;
+        }
+
+        PluginReport report = profiler.report(plugin.configManager().profilerWindowSeconds());
+        if (report.isEmpty()) {
+            sender.sendMessage(ChatColor.GREEN + "Nothing measured yet - give it a few seconds.");
+        } else {
+            sender.sendMessage(ChatColor.GRAY + "Event handler time over the last "
+                    + String.format(Locale.ROOT, "%.0f s", report.windowSeconds())
+                    + ChatColor.DARK_GRAY + " (" + profiler.wrappedListeners() + " handlers watched)");
+            int index = 1;
+            for (PluginTiming timing : report.top(PLUGINS_SHOWN)) {
+                double share = timing.share(report.windowNanos());
+                sender.sendMessage(ChatColor.DARK_GRAY + " " + index++ + ". "
+                        + healthColor(share < 0.10D, share < PluginReport.SIGNIFICANT_SHARE)
+                        + timing.pluginName() + ChatColor.GRAY + " - "
+                        + String.format(Locale.ROOT, "%.0f ms (%.0f%%)", timing.totalMs(), share * 100.0D)
+                        + (timing.worstEvent() == null ? "" : ChatColor.DARK_GRAY + " " + timing.worstEvent()));
+            }
+            if (report.explainsLag()) {
+                sender.sendMessage(ChatColor.YELLOW + report.suggestion());
+            } else {
+                sender.sendMessage(ChatColor.GREEN + "No plugin stands out - none of them is holding the tick.");
+            }
+        }
+
+        // Bukkit gives no way to time scheduled tasks from the outside, so this is a count only.
+        List<Map.Entry<String, Integer>> tasks = profiler.pendingTasks().entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed()
+                        .thenComparing(Map.Entry.comparingByKey()))
+                .limit(PLUGINS_SHOWN)
+                .collect(Collectors.toList());
+        if (!tasks.isEmpty()) {
+            sender.sendMessage(ChatColor.GRAY + "Pending scheduler tasks: " + ChatColor.DARK_GRAY
+                    + tasks.stream().map(entry -> entry.getKey() + " " + entry.getValue())
+                    .collect(Collectors.joining(", ")));
         }
     }
 

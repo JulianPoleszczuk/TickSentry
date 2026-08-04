@@ -43,19 +43,23 @@ public final class ChunkHotspotScanner {
     private final ConfigManager config;
     private final SparkBridge spark;
     private final MemoryWatcher memory;
+    private final PluginProfiler profiler;
     private boolean scanning;
 
     /**
-     * @param plugin plugin instance (server and scheduler access)
-     * @param config source of ignored worlds and the result limit
-     * @param spark  optional source of extra statistics
-     * @param memory memory and garbage collector readings
+     * @param plugin   plugin instance (server and scheduler access)
+     * @param config   source of ignored worlds and the result limit
+     * @param spark    optional source of extra statistics
+     * @param memory   memory and garbage collector readings
+     * @param profiler per-plugin event handler timings
      */
-    public ChunkHotspotScanner(Plugin plugin, ConfigManager config, SparkBridge spark, MemoryWatcher memory) {
+    public ChunkHotspotScanner(Plugin plugin, ConfigManager config, SparkBridge spark,
+                               MemoryWatcher memory, PluginProfiler profiler) {
         this.plugin = plugin;
         this.config = config;
         this.spark = spark;
         this.memory = memory;
+        this.profiler = profiler;
     }
 
     /** @return {@code true} while a scan is in progress */
@@ -174,7 +178,8 @@ public final class ChunkHotspotScanner {
             plugin.getLogger().fine("Scanned " + scannedChunks + " chunks across " + ticksUsed
                     + " ticks (" + durationMs + " ms wall clock).");
             callback.accept(LagEvent.of(tps, mspt, peakMs, scannedChunks, totalEntities, top,
-                    durationMs, manual, spark.summary(), memory.verdict(), config.costWeights()));
+                    durationMs, manual, spark.summary(), memory.verdict(), config.costWeights(),
+                    profiler.report(config.profilerWindowSeconds())));
         }
     }
 }

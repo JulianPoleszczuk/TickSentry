@@ -24,6 +24,9 @@ public enum LagCategory {
     /** The garbage collector or a full heap froze the server, not anything in the world. */
     MEMORY("Memory / garbage collector", "The server ran out of breathing room in RAM"),
 
+    /** One plugin's event handlers took most of the tick - nothing in the world is at fault. */
+    PLUGIN("Plugin", "One plugin's event handlers are eating the tick"),
+
     /** No obvious culprit could be identified. */
     UNKNOWN("No obvious source", "No chunk stands out clearly");
 

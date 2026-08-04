@@ -26,6 +26,17 @@ discord:
   # Optional role id to ping on alert (digits only, without <@&>).
   mention-role-id: ""
 
+profiler:
+  # Measure how long every other plugin spends inside its event handlers, so an alert can name
+  # a plugin instead of a chunk. This is the only way TickSentry can catch lag that is not
+  # caused by anything in the world.
+  #
+  # Cost: two timestamp reads around each handler call. On a busy server that is well under
+  # 1% of a tick. Turn it off if you want TickSentry to touch nothing but its own listeners.
+  enabled: true
+  # How many seconds of measurements a report covers.
+  window-seconds: 30
+
 scan:
   # Worlds skipped while scanning, e.g. ['world_the_end']
   ignored-worlds: []

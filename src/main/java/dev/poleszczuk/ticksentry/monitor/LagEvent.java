@@ -26,6 +26,7 @@ public final class LagEvent {
     private final boolean manual;
     private final String sparkSummary;
     private final String memoryNote;
+    private final String pluginNote;
 
     /**
      * @param timestamp       when it was detected
@@ -41,10 +42,13 @@ public final class LagEvent {
      * @param manual          whether the incident came from {@code /lagwatch report}
      * @param sparkSummary    extra statistics from spark, or {@code null} when spark is absent
      * @param memoryNote      what memory and the garbage collector were doing, or {@code null}
+     * @param pluginNote      which plugin was eating the tick, or {@code null} when none stood out
      */
     public LagEvent(Instant timestamp, double tps, double averageMspt, double peakMs, int loadedChunks,
                     int totalEntities, List<ChunkStat> topChunks, LagCategory category, String suggestedAction,
-                    long scanDurationMs, boolean manual, String sparkSummary, String memoryNote) {
+                    long scanDurationMs, boolean manual, String sparkSummary, String memoryNote,
+                    String pluginNote) {
+        this.pluginNote = pluginNote;
         this.timestamp = timestamp;
         this.tps = tps;
         this.averageMspt = averageMspt;
@@ -103,23 +107,65 @@ public final class LagEvent {
                               int totalEntities, List<ChunkStat> topChunks, long scanDurationMs,
                               boolean manual, String sparkSummary, MemoryAnalyzer.Verdict memory,
                               CostWeights weights) {
-        ChunkStat primary = topChunks.isEmpty() ? null : topChunks.get(0);
-        LagCategory category = primary == null
-                ? LagCategory.UNKNOWN
-                : HotspotAnalyzer.categorize(primary, weights);
+        return of(tps, averageMspt, peakMs, loadedChunks, totalEntities, topChunks, scanDurationMs,
+                manual, sparkSummary, memory, weights, PluginReport.empty());
+    }
 
-        // Nothing in the world stood out, but memory did - then memory is the answer.
-        if (category == LagCategory.UNKNOWN && memory != null && memory.explainsLag()) {
-            category = LagCategory.MEMORY;
+    /**
+     * Assembles an incident from everything the plugin measured.
+     *
+     * <p>Deciding the cause runs in a fixed order. A plugin that took at least half of the
+     * window outranks anything a chunk scan found, because no number of cows explains the
+     * server thread sitting inside one plugin's handler. Otherwise the chunk verdict wins, and
+     * only when no chunk stands out do a merely expensive plugin and then memory get their
+     * turn.</p>
+     *
+     * @param tps            one-minute TPS
+     * @param averageMspt    rolling average MSPT
+     * @param peakMs         longest gap between ticks
+     * @param loadedChunks   number of scanned chunks
+     * @param totalEntities  total entity count
+     * @param topChunks      sorted list of suspicious chunks
+     * @param scanDurationMs scan duration
+     * @param manual         whether the scan was manual
+     * @param sparkSummary   spark statistics, or {@code null}
+     * @param memory         what memory looked like, or {@code null} when unknown
+     * @param weights        cost weights used to categorise the chunk
+     * @param plugins        per-plugin event handler timings, never {@code null}
+     * @return incident ready to be reported
+     */
+    public static LagEvent of(double tps, double averageMspt, double peakMs, int loadedChunks,
+                              int totalEntities, List<ChunkStat> topChunks, long scanDurationMs,
+                              boolean manual, String sparkSummary, MemoryAnalyzer.Verdict memory,
+                              CostWeights weights, PluginReport plugins) {
+        PluginReport pluginReport = plugins == null ? PluginReport.empty() : plugins;
+        ChunkStat primary = topChunks.isEmpty() ? null : topChunks.get(0);
+        LagCategory category;
+
+        if (pluginReport.dominatesLag()) {
+            category = LagCategory.PLUGIN;
+        } else {
+            category = primary == null ? LagCategory.UNKNOWN : HotspotAnalyzer.categorize(primary, weights);
+            if (category == LagCategory.UNKNOWN && pluginReport.explainsLag()) {
+                category = LagCategory.PLUGIN;
+            } else if (category == LagCategory.UNKNOWN && memory != null && memory.explainsLag()) {
+                // Nothing in the world stood out, but memory did - then memory is the answer.
+                category = LagCategory.MEMORY;
+            }
         }
 
-        String action = primary == null || category == LagCategory.MEMORY
-                ? HotspotAnalyzer.suggestedAction(
-                        ChunkStat.ofEntities("-", 0, 0, new HashMap<>()), category)
-                : HotspotAnalyzer.suggestedAction(primary, category);
+        String action;
+        if (category == LagCategory.PLUGIN) {
+            action = pluginReport.suggestion();
+        } else if (primary == null || category == LagCategory.MEMORY) {
+            action = HotspotAnalyzer.suggestedAction(ChunkStat.ofEntities("-", 0, 0, new HashMap<>()), category);
+        } else {
+            action = HotspotAnalyzer.suggestedAction(primary, category);
+        }
+
         return new LagEvent(Instant.now(), tps, averageMspt, peakMs, loadedChunks, totalEntities,
                 topChunks, category, action, scanDurationMs, manual, sparkSummary,
-                memory == null ? null : memory.message());
+                memory == null ? null : memory.message(), pluginReport.message());
     }
 
     /** @return when the incident was detected */
@@ -185,6 +231,11 @@ public final class LagEvent {
     /** @return what memory and the garbage collector were doing, or {@code null} */
     public String memoryNote() {
         return memoryNote;
+    }
+
+    /** @return which plugin was eating the tick, or {@code null} when none stood out */
+    public String pluginNote() {
+        return pluginNote;
     }
 
     /** @return most suspicious chunk, or {@code null} when none stood out */

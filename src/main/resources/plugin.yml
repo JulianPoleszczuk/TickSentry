@@ -14,7 +14,7 @@ libraries:
 commands:
   lagwatch:
     description: Manage lag monitoring.
-    usage: /lagwatch <status|report|history|stats|reload>
+    usage: /lagwatch <status|report|plugins|history|stats|reload>
     aliases: [ts, ticksentry]
     permission: ticksentry.admin
 

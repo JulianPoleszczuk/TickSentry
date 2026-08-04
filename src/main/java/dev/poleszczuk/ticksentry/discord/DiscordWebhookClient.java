@@ -224,6 +224,10 @@ public final class DiscordWebhookClient {
 
         embed.field("What to do", event.suggestedAction(), false);
 
+        if (event.pluginNote() != null) {
+            embed.field("Plugin", event.pluginNote(), false);
+        }
+
         if (event.memoryNote() != null) {
             embed.field("Memory", event.memoryNote(), false);
         }

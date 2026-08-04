@@ -20,6 +20,8 @@ Suggestion: Go there (/tp 1608 ~ 1608). Suspected farm: 841x cow.
   stays slow for a while.
 - Finds the chunk causing the problem and tells you what is in it.
 - Names the cause: a mob farm, dropped items, hoppers, a crowd of players, or too many entities.
+- Times every other plugin's event handlers, so it can name the plugin that is eating the tick
+  instead of blaming a chunk that did nothing wrong.
 - Watches memory too, so it can tell you when the freeze came from the garbage collector or from
   the server running out of RAM - things that counting mobs would never show.
 - Sends the alert to Discord, then sends a second message when the server is fine again.
@@ -64,6 +66,7 @@ handy if you want moderators warned without giving them the commands.
 | `/lagwatch status` | shows TPS and tick time right now |
 | `/lagwatch report` | checks the server immediately and lists the 5 worst chunks |
 | `/lagwatch report discord` | same, but also sends it to Discord (good for testing your webhook) |
+| `/lagwatch plugins` | shows which plugins spent the most time in their event handlers |
 | `/lagwatch history` | shows past incidents, even from before a restart |
 | `/lagwatch stats` | shows a summary: how many incidents, what caused them, at what time of day |
 | `/lagwatch reload` | loads the settings file again |
@@ -91,6 +94,10 @@ discord:
   enabled: true
   webhook-url: ""            # paste your webhook link here
   mention-role-id: ""        # optional: a role to ping, numbers only
+
+profiler:
+  enabled: true              # time other plugins' event handlers
+  window-seconds: 30         # how far back a plugin report looks
 
 scan:
   ignored-worlds: []         # worlds to skip, for example ['world_the_end']
@@ -197,10 +204,38 @@ These work if you have PlaceholderAPI installed:
 | `%ticksentry_last_category%` | what caused the last incident |
 | `%ticksentry_incidents_24h%` | incidents in the last day |
 
+## Finding the plugin that is at fault
+
+Not every slowdown comes from the world. Sometimes one plugin simply does too much work in an
+event handler, and no amount of counting mobs will ever show it.
+
+TickSentry measures this directly. Bukkit keeps every listener in a list, so the plugin swaps
+each one for a thin wrapper that times the original and passes the event straight through -
+same order, same behaviour, two timestamp reads on top. Alerts can then say:
+
+```
+Plugin: SomePlugin used 61% of the last 30 s of server time
+        (18400 ms, mostly in PlayerMoveEvent, 92413 handler calls).
+Suggestion: Look at SomePlugin first: update it, check its settings, or disable it
+            for a moment to confirm. Counting mobs will not help here.
+```
+
+A plugin that takes at least half of the window outranks whatever the chunk scan found - the
+server thread really was sitting inside its code. Below that, the chunk verdict wins and the
+plugin is only mentioned alongside it.
+
+Type `/lagwatch plugins` at any time to see the ranking without waiting for an incident. The
+same command also lists how many scheduler tasks each plugin has queued; Bukkit gives no way to
+time those from the outside, so that part is a count, not a measurement.
+
+Turn the whole thing off with `profiler.enabled: false` if you would rather TickSentry touched
+nothing but its own listeners.
+
 ## What it cannot do
 
-TickSentry looks at **what is inside your world**. It finds too many mobs, too many items, too
-many hoppers, and crowds of players.
+TickSentry looks at **what is inside your world** and at **what your plugins do with the tick**.
+It finds too many mobs, too many items, too many hoppers, crowds of players, and plugins whose
+handlers run long.
 
 It also watches memory, so it can point at the garbage collector or a full heap:
 
@@ -210,9 +245,10 @@ Memory: The garbage collector used 24% of the last 5 s (8 collections).
         The heap is nearly full, so give the server more RAM (-Xmx).
 ```
 
-It **cannot** tell you that a badly written plugin is the problem, or that the lag comes from
-saving the world or generating new land. In those cases it says "No obvious source" and suggests
-you run [spark](https://spark.lucko.me/), which digs deeper.
+It **cannot** see inside a plugin - it tells you which one is slow, not which line. Nor can it
+account for time the server spends saving the world or generating new land. In those cases it
+says "No obvious source" and suggests you run [spark](https://spark.lucko.me/), which digs
+deeper.
 
 If spark is installed, TickSentry adds spark's own numbers to its alerts.
 
@@ -253,7 +289,9 @@ The code is split so that the interesting part can be tested without starting a 
 
 - `monitor/` - measuring ticks and scanning chunks. `HotspotAnalyzer` makes all the decisions
   (which chunk is worst, what the cause is) and knows nothing about Minecraft, so plain unit tests
-  cover it.
+  cover it. `PluginProfiler` is the one class here that has to touch Bukkit internals: it swaps
+  registered listeners for timing wrappers. The ranking and the thresholds it feeds live in
+  `PluginReport`, which is pure and tested.
 - `discord/` - building and sending the alert. Sending happens on its own thread, so the server
   never waits for the network.
 - `storage/` - saving incidents to SQLite. All database work happens off the main thread.
@@ -266,7 +304,7 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 41 of them and none need a fake server.
+Run the tests with `./gradlew test`. There are 64 of them and none need a fake server.
 
 Every push runs the same build on GitHub Actions, which also checks that the jar is still Java 11
 bytecode - so nobody can break 1.16 support by accident.

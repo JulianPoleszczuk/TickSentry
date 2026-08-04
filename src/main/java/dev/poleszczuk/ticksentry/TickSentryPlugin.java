@@ -8,6 +8,7 @@ import dev.poleszczuk.ticksentry.monitor.ChunkStat;
 import dev.poleszczuk.ticksentry.monitor.LagCategory;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
 import dev.poleszczuk.ticksentry.monitor.MemoryWatcher;
+import dev.poleszczuk.ticksentry.monitor.PluginProfiler;
 import dev.poleszczuk.ticksentry.monitor.SparkBridge;
 import dev.poleszczuk.ticksentry.monitor.TickMonitor;
 import dev.poleszczuk.ticksentry.placeholders.TickSentryExpansion;
@@ -52,6 +53,15 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** How often (in ticks) memory and the garbage collector are read (5 seconds). */
     private static final long MEMORY_POLL_TICKS = 20L * 5L;
 
+    /** How often (in ticks) the plugin profiler closes a measurement bucket (5 seconds). */
+    private static final long PROFILER_ROTATE_TICKS = 20L * 5L;
+
+    /**
+     * How often (in ticks) the profiler looks for listeners it has not wrapped yet (60 seconds).
+     * Plugins can register listeners at any time, and one loaded after us starts out unmeasured.
+     */
+    private static final long PROFILER_INSTALL_TICKS = 20L * 60L;
+
     private ConfigManager configManager;
     private TickMonitor tickMonitor;
     private ChunkHotspotScanner scanner;
@@ -59,6 +69,7 @@ public final class TickSentryPlugin extends JavaPlugin {
     private AlertStore alertStore;
     private SparkBridge sparkBridge;
     private MemoryWatcher memoryWatcher;
+    private PluginProfiler pluginProfiler;
     private DashboardServer dashboard;
 
     private volatile int incidentsLast24h;
@@ -71,7 +82,8 @@ public final class TickSentryPlugin extends JavaPlugin {
         this.alertStore = openStore();
         this.sparkBridge = new SparkBridge(this);
         this.memoryWatcher = new MemoryWatcher(MEMORY_POLL_TICKS * 50L);
-        this.scanner = new ChunkHotspotScanner(this, configManager, sparkBridge, memoryWatcher);
+        this.pluginProfiler = new PluginProfiler(this);
+        this.scanner = new ChunkHotspotScanner(this, configManager, sparkBridge, memoryWatcher, pluginProfiler);
         this.webhook = new DiscordWebhookClient(this, configManager);
         this.tickMonitor = new TickMonitor(this, configManager, this::handleSustainedLag, this::handleRecovery);
         this.tickMonitor.start();
@@ -85,6 +97,7 @@ public final class TickSentryPlugin extends JavaPlugin {
 
         registerPlaceholders();
         startDashboard();
+        startPluginProfiler();
         getServer().getScheduler().runTaskTimer(this, memoryWatcher::poll, MEMORY_POLL_TICKS, MEMORY_POLL_TICKS);
         // First read after a second, so the panel and placeholders do not show zero for a whole minute.
         getServer().getScheduler().runTaskTimer(this, this::refreshCounters, 20L, COUNTER_REFRESH_TICKS);
@@ -100,6 +113,10 @@ public final class TickSentryPlugin extends JavaPlugin {
     public void onDisable() {
         if (tickMonitor != null) {
             tickMonitor.stop();
+        }
+        if (pluginProfiler != null) {
+            // Puts every wrapped listener back, so a /reload leaves the server as we found it.
+            pluginProfiler.stop();
         }
         if (webhook != null) {
             webhook.shutdown();
@@ -123,6 +140,29 @@ public final class TickSentryPlugin extends JavaPlugin {
         AlertStore store = SqliteAlertStore.open(this,
                 new File(getDataFolder(), "incidents.db"), configManager.storageKeepDays());
         return store != null ? store : new MemoryAlertStore(MEMORY_CAPACITY);
+    }
+
+    /**
+     * Starts timing other plugins' event handlers.
+     *
+     * <p>Installing is deferred to the first tick on purpose: at {@code onEnable} time the
+     * plugins loaded after us have not registered their listeners yet, and those are exactly
+     * the ones worth measuring.</p>
+     */
+    private void startPluginProfiler() {
+        if (!configManager.profilerEnabled()) {
+            getLogger().info("Plugin profiling is off - alerts will not be able to name a plugin.");
+            return;
+        }
+        getServer().getScheduler().runTaskLater(this, () -> {
+            pluginProfiler.start();
+            getLogger().info("Profiling " + pluginProfiler.wrappedListeners() + " event handlers from other plugins.");
+        }, 1L);
+
+        getServer().getScheduler().runTaskTimer(this, pluginProfiler::rotate,
+                PROFILER_ROTATE_TICKS, PROFILER_ROTATE_TICKS);
+        getServer().getScheduler().runTaskTimer(this, pluginProfiler::install,
+                PROFILER_INSTALL_TICKS, PROFILER_INSTALL_TICKS);
     }
 
     /** Registers the placeholders if PlaceholderAPI is on the server. */
@@ -227,6 +267,9 @@ public final class TickSentryPlugin extends JavaPlugin {
         if (event.memoryNote() != null) {
             getLogger().warning("Memory: " + event.memoryNote());
         }
+        if (event.pluginNote() != null) {
+            getLogger().warning("Plugin: " + event.pluginNote());
+        }
         getLogger().warning("Suggestion: " + event.suggestedAction());
         webhook.sendLagAlert(event);
         announceInGame(event);
@@ -304,6 +347,11 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** @return the memory and garbage collector watcher */
     public MemoryWatcher memoryWatcher() {
         return memoryWatcher;
+    }
+
+    /** @return the profiler timing other plugins' event handlers */
+    public PluginProfiler pluginProfiler() {
+        return pluginProfiler;
     }
 
     /** @return the soft hook into spark (may be unavailable) */
