@@ -40,13 +40,13 @@ import java.util.zip.GZIPOutputStream;
 public final class BStatsReporter {
 
     /**
-     * bStats service id for TickSentry.
+     * bStats service id for TickSentry, from its page at bstats.org.
      *
-     * <p>Zero means the plugin has not been registered at bstats.org yet, and nothing is sent.
-     * To turn this on, add the plugin there and put the id it gives you here - it is an author
-     * constant, not something a server owner should have to fill in.</p>
+     * <p>An author constant, not something a server owner should have to fill in. Zero would
+     * mean the plugin is unregistered and nothing gets sent - that is what a fork should set it
+     * back to, so its servers do not report into this page.</p>
      */
-    public static final int SERVICE_ID = 0;
+    public static final int SERVICE_ID = 33145;
 
     private static final String ENDPOINT = "https://bStats.org/api/v2/data/bukkit";
     private static final String METRICS_VERSION = "3.0.2";
@@ -61,6 +61,10 @@ public final class BStatsReporter {
     private final Map<String, String> charts = new LinkedHashMap<>();
 
     private UUID serverUuid;
+    private HttpClient http;
+
+    /** Written by the HTTP thread, read by the next submission on it - hence volatile. */
+    private volatile boolean firstSubmission = true;
 
     /**
      * @param plugin plugin instance, for the scheduler, the data folder and its version
@@ -95,6 +99,9 @@ public final class BStatsReporter {
             plugin.getLogger().fine("bStats is disabled server-wide - sending nothing.");
             return false;
         }
+        // One client for the life of the plugin. Building one per submission would spin up a
+        // fresh connection pool and thread every half hour for a single request.
+        this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
         plugin.getServer().getScheduler().runTaskTimer(plugin, this::submit, FIRST_DELAY_TICKS, INTERVAL_TICKS);
         return true;
     }
@@ -140,15 +147,43 @@ public final class BStatsReporter {
     /** Collects the numbers on the main thread, then hands the sending to a background thread. */
     private void submit() {
         String payload = buildPayload(plugin.getServer().getOnlinePlayers().size());
-        HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .build()
-                .sendAsync(request(payload), HttpResponse.BodyHandlers.discarding())
+        http.sendAsync(request(payload), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                .thenAccept(this::report)
                 .exceptionally(error -> {
-                    // Statistics are a courtesy to the author, never the admin's problem.
-                    plugin.getLogger().fine("Could not send statistics: " + error);
+                    report(null, String.valueOf(error));
                     return null;
                 });
+    }
+
+    /**
+     * Says whether the submission landed.
+     *
+     * <p>The first one is announced either way. Without that, a payload bStats rejects fails
+     * silently for ever: no data appears on the page and nothing in the log says why. Later
+     * submissions stay quiet - statistics are a courtesy to the author, never something an
+     * admin should have to read about twice an hour.</p>
+     */
+    private void report(HttpResponse<String> response) {
+        if (response != null && response.statusCode() / 100 == 2) {
+            if (firstSubmission) {
+                firstSubmission = false;
+                plugin.getLogger().info("Sent anonymous statistics to bStats (plugin id "
+                        + SERVICE_ID + "). Turn this off with updates.bstats in config.yml.");
+            }
+            return;
+        }
+        report(response, response == null ? "no response" : "HTTP " + response.statusCode()
+                + (response.body() == null || response.body().isEmpty() ? "" : ": " + response.body()));
+    }
+
+    private void report(HttpResponse<String> response, String detail) {
+        if (firstSubmission) {
+            firstSubmission = false;
+            plugin.getLogger().warning("Could not send statistics to bStats (" + detail
+                    + "). Nothing else is affected - turn this off with updates.bstats in config.yml.");
+        } else {
+            plugin.getLogger().fine("Could not send statistics to bStats: " + detail);
+        }
     }
 
     private HttpRequest request(String payload) {

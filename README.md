@@ -331,10 +331,11 @@ The server-wide switch in `plugins/bStats/config.yml` is honoured as well - turn
 there turns it off here, whatever this file says. There is no bundled bStats library; the plugin
 sends the payload itself, so the jar stays exactly as small as it was.
 
-> **For whoever maintains this fork:** statistics are inert until the plugin is registered at
-> bstats.org and the id it gives you is put into `BStatsReporter.SERVICE_ID`. Until then nothing
-> is sent, whatever the config says - that is deliberate, so a fork cannot accidentally post to
-> somebody else's page.
+The first submission happens three minutes after startup and says in the console whether it
+worked. After that it stays quiet and sends once every half hour.
+
+> **If you fork this:** set `BStatsReporter.SERVICE_ID` back to `0`, or register your fork and
+> use its own id. Otherwise your servers report into this plugin's page.
 
 ## Placeholders
 
