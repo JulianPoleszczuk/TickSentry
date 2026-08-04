@@ -527,7 +527,7 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 190 of them, and none needs a running server.
+Run the tests with `./gradlew test`. There are 196 of them, and none needs a running server.
 
 Most cover the pure decision-making. Two files cover the parts that have to touch Bukkit, because
 those are the ones that can damage somebody else's server:

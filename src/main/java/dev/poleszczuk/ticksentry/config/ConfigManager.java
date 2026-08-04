@@ -4,8 +4,17 @@ import dev.poleszczuk.ticksentry.monitor.CostWeights;
 import dev.poleszczuk.ticksentry.remedy.RemedySettings;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.Plugin;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +29,9 @@ import java.util.stream.Collectors;
  * (monitor, commands) and by the webhook delivery thread.</p>
  */
 public final class ConfigManager {
+
+    /** Where a complete, commented copy of the defaults is put when the live file is behind. */
+    public static final String REFERENCE_FILE = "config-latest.yml";
 
     private final Plugin plugin;
 
@@ -133,6 +145,100 @@ public final class ConfigManager {
         this.costWeights = CostWeights.withOverrides(
                 readWeights(cfg.getConfigurationSection("weights.entities")),
                 readWeights(cfg.getConfigurationSection("weights.block-entities")));
+    }
+
+    /**
+     * Tells the admin about settings their {@code config.yml} predates.
+     *
+     * <p>Bukkit only writes the default file when none exists, so upgrading leaves an older file
+     * in place and every setting added since is simply absent. The plugin still works - each
+     * lookup here carries its own default - but the options are invisible, which is how somebody
+     * runs for months without knowing a feature exists.</p>
+     *
+     * <p>Their file is deliberately <b>not</b> rewritten. Saving a {@code YamlConfiguration}
+     * strips every comment, and this config is explained almost entirely in comments; silently
+     * trading that away for a few new lines would be a bad bargain. Instead the missing keys are
+     * named in the log and a complete, commented copy is written next to it to copy from.</p>
+     *
+     * @return keys present in the bundled config but missing from the file on disk
+     */
+    public List<String> reportOutdatedConfig() {
+        FileConfiguration current = plugin.getConfig();
+        YamlConfiguration bundled = bundledConfig();
+        if (bundled == null) {
+            return List.of();
+        }
+
+        List<String> missing = missingKeys(current, bundled);
+        if (missing.isEmpty()) {
+            return missing;
+        }
+
+        plugin.getLogger().warning("Your config.yml predates " + missing.size()
+                + " setting(s), which are running on their built-in defaults: " + String.join(", ", missing));
+        if (writeReferenceConfig()) {
+            plugin.getLogger().warning("A complete, commented copy has been written to "
+                    + REFERENCE_FILE + " - copy what you want across, then run /lagwatch reload.");
+        }
+        return missing;
+    }
+
+    /**
+     * Lists the settings the bundled config has and the live one does not.
+     *
+     * <p>Uses {@code isSet} rather than {@code contains} for a reason worth spelling out.
+     * {@link org.bukkit.plugin.java.JavaPlugin#reloadConfig()} installs the bundled file as the
+     * configuration's <em>defaults</em>, and {@code contains} counts a default as present - so
+     * every missing key looks like it is already there and nothing is ever reported.
+     * {@code isSet} answers the question actually being asked: is this written in the file on
+     * disk.</p>
+     *
+     * @param current  the live configuration, defaults and all
+     * @param bundled  the copy shipped inside the jar
+     * @return missing keys, in the order the bundled file declares them
+     */
+    static List<String> missingKeys(ConfigurationSection current, ConfigurationSection bundled) {
+        List<String> missing = new ArrayList<>();
+        for (String key : bundled.getKeys(true)) {
+            // Only leaves matter: a missing section already shows through the keys inside it,
+            // and reporting both would bury the useful line under its own parents.
+            if (!bundled.isConfigurationSection(key) && !current.isSet(key)) {
+                missing.add(key);
+            }
+        }
+        return missing;
+    }
+
+    /** Reads the copy of {@code config.yml} inside the jar. */
+    private YamlConfiguration bundledConfig() {
+        try (InputStream in = plugin.getResource("config.yml")) {
+            if (in == null) {
+                return null;
+            }
+            return YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
+        } catch (IOException | RuntimeException ex) {
+            plugin.getLogger().warning("Could not read the bundled config.yml: " + ex);
+            return null;
+        }
+    }
+
+    /**
+     * Copies the bundled config next to the live one, comments and all.
+     *
+     * @return whether the file was written
+     */
+    private boolean writeReferenceConfig() {
+        try (InputStream in = plugin.getResource("config.yml")) {
+            if (in == null) {
+                return false;
+            }
+            File target = new File(plugin.getDataFolder(), REFERENCE_FILE);
+            Files.copy(in, target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            return true;
+        } catch (IOException | RuntimeException ex) {
+            plugin.getLogger().warning("Could not write " + REFERENCE_FILE + ": " + ex);
+            return false;
+        }
     }
 
     /**

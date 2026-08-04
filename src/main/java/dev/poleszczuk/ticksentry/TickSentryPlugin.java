@@ -127,6 +127,7 @@ public final class TickSentryPlugin extends JavaPlugin {
         }
         saveDefaultConfig();
         this.configManager = new ConfigManager(this);
+        this.configManager.reportOutdatedConfig();
         this.messages = new MessageBundle(this);
         this.alertStore = openStore();
         this.sparkBridge = new SparkBridge(this);

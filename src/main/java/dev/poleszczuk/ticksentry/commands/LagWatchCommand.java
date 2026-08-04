@@ -406,6 +406,7 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
     /** Reloads the config and resets the monitor's sample window. */
     private void reload(CommandSender sender) {
         plugin.configManager().reload();
+        plugin.configManager().reportOutdatedConfig();
         plugin.messages().reload();
         plugin.tickMonitor().reset();
         // The baseline window length is a setting, so a reload starts it over rather than
