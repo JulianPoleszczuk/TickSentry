@@ -94,6 +94,9 @@ status:
   breach: "&cThreshold exceeded for {seconds} s (alert after {after} s)."
   # {seconds}
   cooldown: "&7Next alert possible in &f{seconds} s&7."
+  # Where alerts are being sent - Discord, a generic webhook, console commands, or several. {sinks}
+  alerts: "&7Alerts go to: &a{sinks}"
+  alerts-none: "&7Alerts go to: &enowhere &8(in-game only - nothing is configured)"
   discord: "&7Discord: {state}"
   discord-configured: "&aconfigured"
   discord-missing: "&edisabled or webhook missing"

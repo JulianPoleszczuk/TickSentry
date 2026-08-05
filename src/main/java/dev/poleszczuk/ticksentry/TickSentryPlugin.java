@@ -1,6 +1,9 @@
 package dev.poleszczuk.ticksentry;
 
 import dev.poleszczuk.ticksentry.alert.AlertSinks;
+import dev.poleszczuk.ticksentry.alert.CommandSink;
+import dev.poleszczuk.ticksentry.alert.TickSentryIncidentEvent;
+import dev.poleszczuk.ticksentry.alert.WebhookSink;
 import dev.poleszczuk.ticksentry.commands.LagWatchCommand;
 import dev.poleszczuk.ticksentry.config.ConfigManager;
 import dev.poleszczuk.ticksentry.config.MessageBundle;
@@ -50,6 +53,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.logging.Level;
 
 /**
  * Plugin entry point - wires together the config, the tick monitor, the incident store and alerts.
@@ -178,6 +182,10 @@ public final class TickSentryPlugin extends JavaPlugin {
         this.webhook = new DiscordWebhookClient(this, configManager, messages, this::effectiveThresholdMs);
         this.alertSinks = new AlertSinks(this);
         this.alertSinks.add(webhook);
+        this.alertSinks.add(new WebhookSink(this, configManager::genericWebhookUrl,
+                configManager::webhookHeaders, this::effectiveThresholdMs));
+        this.alertSinks.add(new CommandSink(this, configManager::commandsEnabled,
+                configManager::incidentCommands, configManager::recoveryCommands));
         this.remediation = new AutoRemediation(this, scheduler, configManager::remedySettings,
                 this::reportRemediation, messages);
         this.adaptiveThreshold = new AdaptiveThreshold(configManager.adaptiveSettings(),
@@ -549,6 +557,8 @@ public final class TickSentryPlugin extends JavaPlugin {
         getLogger().warning("Suggestion: " + event.suggestedAction());
         alertSinks.incident(event);
         announceInGame(event);
+        // Fired last, so a listener that throws cannot stop the alert from having gone out.
+        fireIncidentEvent(event);
         if (worldScanAllowed) {
             // Removing entities means touching chunks, which on Folia belong to other threads.
             // A chunkless incident would give it nothing to act on anyway; this makes that a
@@ -586,6 +596,23 @@ public final class TickSentryPlugin extends JavaPlugin {
      */
     public boolean worldScanAllowed() {
         return worldScanAllowed;
+    }
+
+    /**
+     * Lets other plugins know an incident happened.
+     *
+     * <p>Wrapped, because a listener belonging to somebody else must not be able to break the
+     * reporting path it is listening to - which is exactly the class of bug this plugin exists to
+     * find in other people's code.</p>
+     *
+     * @param event the incident that was reported
+     */
+    private void fireIncidentEvent(LagEvent event) {
+        try {
+            getServer().getPluginManager().callEvent(new TickSentryIncidentEvent(event));
+        } catch (RuntimeException | LinkageError ex) {
+            getLogger().log(Level.WARNING, "A listener for TickSentryIncidentEvent failed", ex);
+        }
     }
 
     /**
@@ -692,6 +719,11 @@ public final class TickSentryPlugin extends JavaPlugin {
     /** @return the Discord webhook client */
     public DiscordWebhookClient webhook() {
         return webhook;
+    }
+
+    /** @return every destination alerts are sent to */
+    public AlertSinks alertSinks() {
+        return alertSinks;
     }
 
     /** @return the plugin configuration manager */

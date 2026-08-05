@@ -61,6 +61,39 @@ discord:
   # Optional role id to ping on alert (digits only, without <@&>).
   mention-role-id: ""
 
+# Send the same alerts as plain JSON to any address. Covers Slack, Mattermost, n8n, Home Assistant,
+# a Zapier catch hook, or a script of your own - all of them take a JSON POST, so none of them needs
+# anything special here.
+#
+# The body carries both a ready-made sentence and the raw numbers:
+#   {"event":"incident","text":"Server is lagging: Mob farm - TPS 18.3, tick time 80 ms at world @ 1608, 1608.",
+#    "cause":"MOB_FARM","tps":18.3,"mspt":80.1,"world":"world","x":1608,"z":1608, ...}
+#
+# Chat services render "text" and ignore the rest. A script reads the fields and ignores the text.
+webhook:
+  enabled: false
+  url: ""
+  # Optional extra request headers, for an endpoint that wants a token.
+  #   headers:
+  #     Authorization: "Bearer abc123"
+  headers: {}
+
+# Run console commands when something happens. This is the escape hatch: whatever integration you
+# want, you can build it out of commands without waiting for it to be added here.
+#
+# Placeholders: {cause} {tps} {mspt} {world} {x} {z} {duration}
+# Leave the leading slash off, exactly as you would type it in the console.
+#
+#   on-incident:
+#     - "say The server is struggling ({cause}) - staff are on it"
+#     - "discordsrv broadcast Lag at {world} {x} {z}"
+#
+# Commands run as the console, so they are unrestricted. Anything you put here can do anything.
+commands:
+  enabled: false
+  on-incident: []
+  on-recovery: []
+
 updates:
   # Ask the GitHub releases page once at startup whether a newer TickSentry exists, and tell
   # you in the console and in game. Nothing is ever downloaded or installed - you decide.

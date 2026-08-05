@@ -277,6 +277,69 @@ console - the plugin writes down what Discord answered.
 
 **Keep that link private.** Anyone who has it can post in your channel.
 
+## Somewhere other than Discord
+
+Discord was the only destination, so anything else meant editing the plugin. Nothing about deciding to
+alert is Discord-specific, so there are now three more ways out - use as many as you like at once, and
+`/lagwatch status` lists whichever are configured.
+
+### A plain webhook
+
+```yaml
+webhook:
+  enabled: true
+  url: "https://hooks.slack.com/services/..."
+  headers:
+    Authorization: "Bearer abc123"   # optional
+```
+
+One JSON POST, which is all Slack, Mattermost, n8n, Home Assistant, a Zapier catch hook or a script of
+your own needs:
+
+```json
+{"event":"incident",
+ "text":"Server is lagging: Mob farm - TPS 18.3, tick time 80 ms at world @ 1608, 1608.",
+ "cause":"MOB_FARM","tps":18.3,"mspt":80.1,"p99Ms":210.0,
+ "world":"world","x":1608,"z":1608,"owner":"somebody's claim",
+ "suggestion":"Go there (/tp 1608 ~ 1608). Suspected farm: 841x cow."}
+```
+
+Chat services render `text` and ignore the rest; a script reads the fields and ignores the text. There
+is no retry on a failed delivery - unlike Discord, this endpoint is unknown, and it may be a script
+that already acted on the alert.
+
+### Console commands
+
+```yaml
+commands:
+  enabled: true
+  on-incident:
+    - "say Staff have been notified about the lag"
+    - "discordsrv broadcast Lag at {world} {x} {z}"
+  on-recovery:
+    - "say All clear - the server recovered after {duration} s"
+```
+
+Placeholders: `{cause}` `{tps}` `{mspt}` `{world}` `{x}` `{z}` `{duration}`.
+
+This is the escape hatch. Whatever integration you want, you can usually reach it with a command
+without waiting for it to be added here. These run **as the console and are unrestricted**, which is
+why the section is off by default.
+
+### An event, for plugin authors
+
+```java
+@EventHandler
+public void onLag(TickSentryIncidentEvent event) {
+    LagEvent incident = event.getIncident();
+    getLogger().info("Cause: " + incident.category().title());
+}
+```
+
+Fired on the server thread once the incident has been reported, carrying everything the plugin measured
+and concluded. Not cancellable - it is a notification about something that already happened. A listener
+that throws is logged and cannot break the alert that triggered it.
+
 ## The web page
 
 Set `enabled: true` under `dashboard` and restart. The console will print the address:
@@ -652,7 +715,7 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 267 of them, and none needs a running server.
+Run the tests with `./gradlew test`. There are 282 of them, and none needs a running server.
 
 Most cover the pure decision-making. Three files cover the parts that have to touch Bukkit, because
 those are the ones that can damage somebody else's server - or, in the monitor's case, quietly fail

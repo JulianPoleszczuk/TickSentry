@@ -55,6 +55,14 @@ public final class ConfigManager implements MonitorSettings {
     private volatile int storageKeepDays;
     private volatile int offenderDays;
 
+    private volatile boolean webhookEnabled;
+    private volatile String webhookUrlGeneric;
+    private volatile Map<String, String> webhookHeaders = Map.of();
+
+    private volatile boolean commandsEnabled;
+    private volatile List<String> incidentCommands = List.of();
+    private volatile List<String> recoveryCommands = List.of();
+
     private volatile boolean updateCheck;
     private volatile boolean bstatsEnabled;
 
@@ -116,6 +124,14 @@ public final class ConfigManager implements MonitorSettings {
         this.storageEnabled = cfg.getBoolean("storage.enabled", true);
         this.storageKeepDays = Math.max(0, cfg.getInt("storage.keep-days", 30));
         this.offenderDays = Math.min(365, Math.max(1, cfg.getInt("storage.offender-days", 7)));
+
+        this.webhookEnabled = cfg.getBoolean("webhook.enabled", false);
+        this.webhookUrlGeneric = cfg.getString("webhook.url", "").trim();
+        this.webhookHeaders = readHeaders(cfg.getConfigurationSection("webhook.headers"));
+
+        this.commandsEnabled = cfg.getBoolean("commands.enabled", false);
+        this.incidentCommands = List.copyOf(cfg.getStringList("commands.on-incident"));
+        this.recoveryCommands = List.copyOf(cfg.getStringList("commands.on-recovery"));
 
         this.updateCheck = cfg.getBoolean("updates.check", true);
         this.bstatsEnabled = cfg.getBoolean("updates.bstats", true);
@@ -362,6 +378,56 @@ public final class ConfigManager implements MonitorSettings {
     /** @return how many days back to look when deciding which chunks keep coming back */
     public int offenderDays() {
         return offenderDays;
+    }
+
+    /** @return whether the generic webhook is switched on and has an address */
+    public boolean webhookEnabled() {
+        return webhookEnabled && !webhookUrlGeneric.isEmpty();
+    }
+
+    /** @return the generic webhook address, or an empty string when unset */
+    public String genericWebhookUrl() {
+        return webhookEnabled() ? webhookUrlGeneric : "";
+    }
+
+    /** @return extra headers to send with the generic webhook, never {@code null} */
+    public Map<String, String> webhookHeaders() {
+        return webhookHeaders;
+    }
+
+    /** @return whether console commands may be run when something happens */
+    public boolean commandsEnabled() {
+        return commandsEnabled;
+    }
+
+    /** @return console commands to run on an incident, without leading slashes */
+    public List<String> incidentCommands() {
+        return incidentCommands;
+    }
+
+    /** @return console commands to run once the server recovers */
+    public List<String> recoveryCommands() {
+        return recoveryCommands;
+    }
+
+    /**
+     * Reads the webhook headers section, ignoring anything that is not a plain value.
+     *
+     * @param section config section, may be {@code null} when absent
+     * @return header name to value, empty when the section is missing
+     */
+    private Map<String, String> readHeaders(ConfigurationSection section) {
+        if (section == null) {
+            return Map.of();
+        }
+        Map<String, String> headers = new HashMap<>();
+        for (String key : section.getKeys(false)) {
+            String value = section.getString(key);
+            if (value != null) {
+                headers.put(key, value);
+            }
+        }
+        return Map.copyOf(headers);
     }
 
     /** @return whether to ask GitHub at startup for a newer release */

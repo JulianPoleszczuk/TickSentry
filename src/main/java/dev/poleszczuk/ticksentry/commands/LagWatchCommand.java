@@ -197,9 +197,10 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         if (cooldown > 0L) {
             sender.sendMessage(msg("status.cooldown", "seconds", String.valueOf(cooldown)));
         }
-        sender.sendMessage(msg("status.discord", "state",
-                msg(plugin.configManager().discordEnabled()
-                        ? "status.discord-configured" : "status.discord-missing")));
+        List<String> sinks = plugin.alertSinks().configuredNames();
+        sender.sendMessage(sinks.isEmpty()
+                ? msg("status.alerts-none")
+                : msg("status.alerts", "sinks", String.join(", ", sinks)));
 
         String spark = plugin.sparkBridge().summary();
         sender.sendMessage(spark == null
