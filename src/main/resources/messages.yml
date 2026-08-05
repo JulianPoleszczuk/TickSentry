@@ -48,6 +48,11 @@ command:
   no-permission: "&cYou do not have permission."
   usage: "&cUsage: /{label} <status|report|plugins|history|offenders|stats|reload>"
   header: "&8--- &bTickSentry &f{section} &8---"
+  # The button appended to every line that has coordinates. Shown only to players holding
+  # ticksentry.teleport - console and everyone else get the plain line.
+  teleport-button: "&8 [&bTP&8]"
+  # {location}
+  teleport-hover: "&7Click to teleport to &f{location}"
   section:
     status: "Status"
     report: "Report"
@@ -167,6 +172,16 @@ stats:
   histogram-header: "&7Spread across the day:"
   # {row}
   histogram-row: "&8 {row}"
+
+teleport:
+  no-permission: "&cYou do not have permission to teleport."
+  players-only: "&cOnly a player can be teleported."
+  # {label}
+  usage: "&cUsage: /{label} tp <world> <x> <z>"
+  # {world}
+  unknown-world: "&cThere is no loaded world called {world}."
+  # {location}
+  done: "&aTeleported to &f{location}&a."
 
 reload:
   # {threshold} {seconds} {adaptive}

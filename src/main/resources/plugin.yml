@@ -28,6 +28,12 @@ permissions:
     default: op
     children:
       ticksentry.alerts: true
+      ticksentry.teleport: true
   ticksentry.alerts:
     description: Receive lag alerts in the game chat.
+    default: op
+  # Treat this as a teleport permission, not a reporting one: it lets the holder reach any
+  # coordinates in any loaded world, which is more than being allowed to read the reports.
+  ticksentry.teleport:
+    description: Use the teleport button in reports to jump to a reported chunk.
     default: op

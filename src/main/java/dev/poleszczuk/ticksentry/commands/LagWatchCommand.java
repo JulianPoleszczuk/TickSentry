@@ -14,15 +14,19 @@ import dev.poleszczuk.ticksentry.remedy.RemedySettings;
 import dev.poleszczuk.ticksentry.storage.RepeatOffender;
 import dev.poleszczuk.ticksentry.storage.StoredIncident;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -34,8 +38,18 @@ import java.util.stream.Collectors;
 public final class LagWatchCommand implements CommandExecutor, TabCompleter {
 
     private static final String PERMISSION = "ticksentry.admin";
+
+    /**
+     * Permission for the teleport button.
+     *
+     * <p>Separate from {@code ticksentry.admin} because it is a genuinely different power: it lets
+     * whoever holds it teleport to any coordinates in any world, which is more than "may read the
+     * reports".</p>
+     */
+    private static final String TELEPORT_PERMISSION = "ticksentry.teleport";
+
     private static final List<String> SUBCOMMANDS =
-            List.of("status", "report", "plugins", "history", "offenders", "stats", "reload");
+            List.of("status", "report", "plugins", "history", "offenders", "stats", "tp", "reload");
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
     private static final DateTimeFormatter DATE_TIME =
             DateTimeFormatter.ofPattern("dd.MM HH:mm").withZone(ZoneId.systemDefault());
@@ -85,20 +99,23 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                 showStatus(sender);
                 break;
             case "report":
-                showReport(sender, args.length > 1 && "discord".equalsIgnoreCase(args[1]));
+                showReport(sender, label, args.length > 1 && "discord".equalsIgnoreCase(args[1]));
                 break;
             case "plugins":
                 showPlugins(sender);
                 break;
             case "history":
-                showHistory(sender);
+                showHistory(sender, label);
                 break;
             case "offenders":
-                showOffenders(sender, args.length > 1
+                showOffenders(sender, label, args.length > 1
                         ? parseDays(args) : plugin.configManager().offenderDays());
                 break;
             case "stats":
                 showStats(sender, parseDays(args));
+                break;
+            case "tp":
+                teleport(sender, label, args);
                 break;
             case "reload":
                 reload(sender);
@@ -201,15 +218,15 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
     }
 
     /** Forces a scan and prints the result in chat; optionally sends it to Discord too. */
-    private void showReport(CommandSender sender, boolean alsoDiscord) {
-        boolean started = plugin.runScan(true, event -> printReport(sender, event, alsoDiscord));
+    private void showReport(CommandSender sender, String label, boolean alsoDiscord) {
+        boolean started = plugin.runScan(true, event -> printReport(sender, label, event, alsoDiscord));
         if (!started) {
             sender.sendMessage(msg("report.already-running"));
         }
     }
 
     /** Prints a finished report; called once the tick-spread scan completes. */
-    private void printReport(CommandSender sender, LagEvent event, boolean alsoDiscord) {
+    private void printReport(CommandSender sender, String label, LagEvent event, boolean alsoDiscord) {
         plugin.recordManual(event);
 
         header(sender, msg("command.section.report"));
@@ -231,12 +248,13 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(msg("report.cause", "cause", cause));
             int index = 1;
             for (ChunkStat stat : event.topChunks()) {
-                sender.sendMessage(msg("report.chunk",
+                sendLocated(sender, label, msg("report.chunk",
                         "index", String.valueOf(index++),
                         "location", stat.prettyLocation(),
                         "entities", String.valueOf(stat.entityCount()),
                         "tiles", String.valueOf(stat.tileEntityCount()),
-                        "dominant", describeDominant(stat)));
+                        "dominant", describeDominant(stat)),
+                        stat.worldName(), stat.blockX(), stat.blockZ(), stat.prettyLocation());
                 if (stat.attribution() != null) {
                     sender.sendMessage(msg("report.chunk-owner", "attribution", stat.attribution()));
                 }
@@ -319,7 +337,7 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
     }
 
     /** Prints recent incidents; with SQLite storage this includes ones from before a restart. */
-    private void showHistory(CommandSender sender) {
+    private void showHistory(CommandSender sender, String label) {
         plugin.alertStore().recent(HISTORY_SHOWN, incidents -> {
             header(sender, msg("command.section.history"));
             if (incidents.isEmpty()) {
@@ -329,14 +347,16 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
             for (StoredIncident incident : incidents) {
                 boolean today = Duration.between(incident.timestamp(), Instant.now()).toHours() < 24L;
                 DateTimeFormatter format = today ? TIME : DATE_TIME;
-                sender.sendMessage(msg("history.entry",
+                sendLocated(sender, label, msg("history.entry",
                         "time", format.format(incident.timestamp()),
                         "ago", ago(incident.timestamp()),
                         "mspt", String.format(Locale.ROOT, "%.0f", incident.mspt()),
                         "cause", plugin.messages().categoryTitle(incident.category()),
                         "location", incident.world() == null
                                 ? "" : msg("history.at", "location", incident.prettyLocation()),
-                        "manual", incident.manual() ? msg("history.manual") : ""));
+                        "manual", incident.manual() ? msg("history.manual") : ""),
+                        incident.world(), incident.blockX(), incident.blockZ(),
+                        incident.prettyLocation());
             }
         });
     }
@@ -347,7 +367,7 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
      * <p>This is the difference between a farm somebody built ten minutes ago and one that has
      * been dragging the server down every evening for a week.</p>
      */
-    private void showOffenders(CommandSender sender, int days) {
+    private void showOffenders(CommandSender sender, String label, int days) {
         plugin.alertStore().offenders(days, OFFENDERS_SHOWN, offenders -> {
             header(sender, msg("command.section.offenders", "days", String.valueOf(days)));
             if (offenders.isEmpty()) {
@@ -356,14 +376,16 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
             }
             int index = 1;
             for (RepeatOffender offender : offenders) {
-                sender.sendMessage(msg("offenders.entry",
+                sendLocated(sender, label, msg("offenders.entry",
                         "index", String.valueOf(index++),
                         "colour", (offender.isChronic() ? ChatColor.RED : ChatColor.YELLOW).toString(),
                         "location", offender.prettyLocation(),
                         "hits", String.valueOf(offender.hits()),
                         "total", String.valueOf(offender.outOf()),
                         "worst", String.format(Locale.ROOT, "%.0f", offender.worstMspt()),
-                        "ago", ago(offender.lastSeen())));
+                        "ago", ago(offender.lastSeen())),
+                        offender.world(), offender.blockX(), offender.blockZ(),
+                        offender.prettyLocation());
             }
             RepeatOffender worst = offenders.get(0);
             if (worst.isChronic()) {
@@ -414,6 +436,94 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                 histogram.forEach(line -> sender.sendMessage(msg("stats.histogram-row", "row", line)));
             }
         });
+    }
+
+    /**
+     * Takes the sender to a reported location.
+     *
+     * <p>What the buttons in every listing run. Also typeable, which is the point: the coordinates
+     * are in the command, so there is no per-player listing state to keep in step and nothing goes
+     * stale when a chunk stops being a problem.</p>
+     */
+    private void teleport(CommandSender sender, String label, String[] args) {
+        if (!sender.hasPermission(TELEPORT_PERMISSION)) {
+            sender.sendMessage(msg("teleport.no-permission"));
+            return;
+        }
+        if (!(sender instanceof Player)) {
+            sender.sendMessage(msg("teleport.players-only"));
+            return;
+        }
+        if (args.length < 4) {
+            sender.sendMessage(msg("teleport.usage", "label", label));
+            return;
+        }
+
+        // Parsed from the end, so a world name containing a space still works. Bukkit splits a
+        // command on spaces and offers no quoting, and the coordinates are always the last two.
+        int x;
+        int z;
+        try {
+            x = Integer.parseInt(args[args.length - 2]);
+            z = Integer.parseInt(args[args.length - 1]);
+        } catch (NumberFormatException ex) {
+            sender.sendMessage(msg("teleport.usage", "label", label));
+            return;
+        }
+
+        String worldName = String.join(" ",
+                Arrays.copyOfRange(args, 1, args.length - 2));
+        World world = plugin.getServer().getWorld(worldName);
+        if (world == null) {
+            sender.sendMessage(msg("teleport.unknown-world", "world", worldName));
+            return;
+        }
+
+        Player player = (Player) sender;
+        // This loads the target chunk on the main thread, which is the very thing the plugin warns
+        // about elsewhere. It is a deliberate one-off: an admin asked to go and look, and the
+        // alternative is making them type coordinates by hand.
+        player.teleport(new Location(world, x + 0.5D, safeY(world, player, x, z), z + 0.5D));
+        sender.sendMessage(msg("teleport.done", "location", world.getName() + " @ " + x + ", " + z));
+    }
+
+    /**
+     * Picks a Y to arrive at.
+     *
+     * <p>The highest block is right almost everywhere and wrong in the Nether, where it is the roof:
+     * an admin sent to investigate a farm would land on top of the world, a hundred blocks above
+     * whatever they came to see. There, their current height is the better guess.</p>
+     */
+    private static int safeY(World world, Player player, int x, int z) {
+        if (world.getEnvironment() == World.Environment.NETHER) {
+            return Math.max(1, Math.min(125, player.getLocation().getBlockY()));
+        }
+        return world.getHighestBlockYAt(x, z) + 1;
+    }
+
+    /**
+     * Sends a listing line, with a teleport button when the recipient can use one.
+     *
+     * <p>Console and anyone without the permission get exactly the line they got before.</p>
+     *
+     * @param sender   who is being told
+     * @param label    the alias the sender typed, so the button works under {@code /ts} too
+     * @param line     the finished line
+     * @param world    world name, or {@code null} when the incident had no location
+     * @param x        block X
+     * @param z        block Z
+     * @param location readable location for the hover text
+     */
+    private void sendLocated(CommandSender sender, String label, String line,
+                             String world, int x, int z, String location) {
+        if (world == null || !(sender instanceof Player) || !sender.hasPermission(TELEPORT_PERMISSION)) {
+            sender.sendMessage(line);
+            return;
+        }
+        sender.spigot().sendMessage(TeleportLink.append(line,
+                msg("command.teleport-button"),
+                msg("command.teleport-hover", "location", location),
+                TeleportLink.command(label, world, x, z)));
     }
 
     /** Reads the optional day count from the command arguments. */
@@ -494,6 +604,13 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2 && ("stats".equalsIgnoreCase(args[0]) || "offenders".equalsIgnoreCase(args[0]))) {
             return List.of("1", "7", "30");
+        }
+        if (args.length == 2 && "tp".equalsIgnoreCase(args[0])) {
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            return plugin.getServer().getWorlds().stream()
+                    .map(World::getName)
+                    .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(prefix))
+                    .collect(Collectors.toList());
         }
         return List.of();
     }
