@@ -2,6 +2,7 @@ package dev.poleszczuk.ticksentry.storage;
 
 import dev.poleszczuk.ticksentry.monitor.LagCategory;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
+import dev.poleszczuk.ticksentry.monitor.PluginBaseline;
 import dev.poleszczuk.ticksentry.util.Scheduler;
 import org.bukkit.plugin.Plugin;
 import org.sqlite.SQLiteDataSource;
@@ -17,6 +18,8 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -53,6 +56,30 @@ public final class SqliteAlertStore implements AlertStore {
             + "manual INTEGER NOT NULL)";
 
     private static final String INDEX = "CREATE INDEX IF NOT EXISTS idx_incidents_ts ON incidents(ts)";
+
+    /**
+     * Per-plugin cost samples, so "expensive" can become "has become expensive".
+     *
+     * <p>The share is stored rather than the raw nanoseconds: it is already normalised against the
+     * window length, so samples taken under different profiler settings stay comparable. The player
+     * count goes with it because handler time scales with how busy the server was.</p>
+     */
+    private static final String PLUGIN_SCHEMA =
+            "CREATE TABLE IF NOT EXISTS plugin_timings ("
+            + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            + "ts INTEGER NOT NULL,"
+            + "plugin TEXT NOT NULL,"
+            + "share REAL NOT NULL,"
+            + "players INTEGER NOT NULL)";
+
+    private static final String PLUGIN_INDEX =
+            "CREATE INDEX IF NOT EXISTS idx_plugin_timings_ts ON plugin_timings(ts)";
+
+    private static final String INSERT_PLUGIN =
+            "INSERT INTO plugin_timings (ts, plugin, share, players) VALUES (?, ?, ?, ?)";
+
+    private static final String SELECT_PLUGIN_SINCE =
+            "SELECT plugin, share, players FROM plugin_timings WHERE ts >= ?";
 
     private static final String COLUMNS =
             "ts, tps, mspt, category, world, block_x, block_z, entities, dominant_type, dominant_count, manual";
@@ -107,6 +134,8 @@ public final class SqliteAlertStore implements AlertStore {
             try (Statement statement = connection.createStatement()) {
                 statement.executeUpdate(SCHEMA);
                 statement.executeUpdate(INDEX);
+                statement.executeUpdate(PLUGIN_SCHEMA);
+                statement.executeUpdate(PLUGIN_INDEX);
             }
 
             SqliteAlertStore store = new SqliteAlertStore(plugin, scheduler, file, connection);
@@ -206,6 +235,51 @@ public final class SqliteAlertStore implements AlertStore {
     }
 
     @Override
+    public void recordPluginTimings(Map<String, Double> samples, int players) {
+        if (samples.isEmpty()) {
+            return;
+        }
+        // Copied before leaving the calling thread: the caller built this from live counters and is
+        // free to reuse the map.
+        Map<String, Double> snapshot = new LinkedHashMap<>(samples);
+        long now = System.currentTimeMillis();
+        executor.execute(() -> {
+            try (PreparedStatement statement = connection.prepareStatement(INSERT_PLUGIN)) {
+                for (Map.Entry<String, Double> entry : snapshot.entrySet()) {
+                    statement.setLong(1, now);
+                    statement.setString(2, entry.getKey());
+                    statement.setDouble(3, entry.getValue());
+                    statement.setInt(4, players);
+                    statement.addBatch();
+                }
+                statement.executeBatch();
+            } catch (SQLException ex) {
+                plugin.getLogger().log(Level.WARNING, "Could not save the plugin timings", ex);
+            }
+        });
+    }
+
+    @Override
+    public void pluginHistory(int days, Consumer<Map<String, List<PluginBaseline.Sample>>> callback) {
+        executor.execute(() -> {
+            Map<String, List<PluginBaseline.Sample>> result = new HashMap<>();
+            try (PreparedStatement statement = connection.prepareStatement(SELECT_PLUGIN_SINCE)) {
+                statement.setLong(1, Instant.now().minus(days, ChronoUnit.DAYS).toEpochMilli());
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) {
+                        result.computeIfAbsent(rows.getString("plugin"), key -> new ArrayList<>())
+                                .add(new PluginBaseline.Sample(
+                                        rows.getDouble("share"), rows.getInt("players")));
+                    }
+                }
+            } catch (SQLException ex) {
+                plugin.getLogger().log(Level.WARNING, "Could not read the plugin timing history", ex);
+            }
+            backToMainThread(callback, result);
+        });
+    }
+
+    @Override
     public String describe() {
         return "SQLite (" + file.getName() + ")";
     }
@@ -252,14 +326,24 @@ public final class SqliteAlertStore implements AlertStore {
 
     /** Deletes rows older than the given number of days. Runs on the storage thread. */
     private void pruneNow(int keepDays) {
+        long cutoff = Instant.now().minus(keepDays, ChronoUnit.DAYS).toEpochMilli();
         try (PreparedStatement statement = connection.prepareStatement("DELETE FROM incidents WHERE ts < ?")) {
-            statement.setLong(1, Instant.now().minus(keepDays, ChronoUnit.DAYS).toEpochMilli());
+            statement.setLong(1, cutoff);
             int removed = statement.executeUpdate();
             if (removed > 0) {
                 plugin.getLogger().info("Removed " + removed + " incidents older than " + keepDays + " days.");
             }
         } catch (SQLException ex) {
             plugin.getLogger().log(Level.WARNING, "Could not prune old incidents", ex);
+        }
+        // Plugin samples are taken far more often than incidents happen, so leaving them out of the
+        // retention sweep would make them the thing that grows the database.
+        try (PreparedStatement statement =
+                     connection.prepareStatement("DELETE FROM plugin_timings WHERE ts < ?")) {
+            statement.setLong(1, cutoff);
+            statement.executeUpdate();
+        } catch (SQLException ex) {
+            plugin.getLogger().log(Level.WARNING, "Could not prune old plugin timings", ex);
         }
     }
 

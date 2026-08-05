@@ -2,6 +2,7 @@ package dev.poleszczuk.ticksentry.storage;
 
 import dev.poleszczuk.ticksentry.monitor.LagCategory;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
+import dev.poleszczuk.ticksentry.monitor.PluginBaseline;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -10,6 +11,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -20,7 +22,17 @@ import java.util.function.Consumer;
  */
 public final class MemoryAlertStore implements AlertStore {
 
+    /**
+     * How many samples per plugin to keep.
+     *
+     * <p>Enough to clear {@link PluginBaseline#MIN_SAMPLES} several times over at one player count,
+     * because samples get filtered by how busy the server was and a flat cap on the total would
+     * leave nothing comparable.</p>
+     */
+    private static final int PLUGIN_SAMPLE_CAPACITY = 64;
+
     private final Deque<StoredIncident> incidents = new ArrayDeque<>();
+    private final Map<String, Deque<PluginBaseline.Sample>> pluginSamples = new HashMap<>();
     private final int capacity;
 
     /**
@@ -70,6 +82,28 @@ public final class MemoryAlertStore implements AlertStore {
     @Override
     public void offenders(int days, int limit, Consumer<List<RepeatOffender>> callback) {
         callback.accept(RepeatOffender.summarise(since(days), days, limit));
+    }
+
+    @Override
+    public synchronized void recordPluginTimings(Map<String, Double> samples, int players) {
+        for (Map.Entry<String, Double> entry : samples.entrySet()) {
+            Deque<PluginBaseline.Sample> history =
+                    pluginSamples.computeIfAbsent(entry.getKey(), key -> new ArrayDeque<>());
+            history.addLast(new PluginBaseline.Sample(entry.getValue(), players));
+            while (history.size() > PLUGIN_SAMPLE_CAPACITY) {
+                history.removeFirst();
+            }
+        }
+    }
+
+    @Override
+    public synchronized void pluginHistory(int days,
+                                           Consumer<Map<String, List<PluginBaseline.Sample>>> callback) {
+        // The day count is ignored: this store has no timestamps and is bounded by capacity, so
+        // "everything it has" is the only window it can honestly offer.
+        Map<String, List<PluginBaseline.Sample>> result = new HashMap<>();
+        pluginSamples.forEach((plugin, history) -> result.put(plugin, new ArrayList<>(history)));
+        callback.accept(result);
     }
 
     @Override

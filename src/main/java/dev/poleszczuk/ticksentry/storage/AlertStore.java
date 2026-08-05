@@ -1,8 +1,10 @@
 package dev.poleszczuk.ticksentry.storage;
 
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
+import dev.poleszczuk.ticksentry.monitor.PluginBaseline;
 
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -45,6 +47,27 @@ public interface AlertStore {
      * @param callback receiver of the ranking (main thread), most frequent first
      */
     void offenders(int days, int limit, Consumer<List<RepeatOffender>> callback);
+
+    /**
+     * Remembers how much of the tick each plugin was taking just now.
+     *
+     * <p>Kept so that "this plugin is expensive" can become "this plugin has <em>become</em>
+     * expensive", which is the question a live profiler cannot answer - it has no memory of last
+     * week. The player count travels with each sample because handler time scales with how busy the
+     * server is, and a reading taken at forty players cannot be compared with one taken at five.</p>
+     *
+     * @param samples one entry per plugin measured, may be empty
+     * @param players how many players were online when they were taken
+     */
+    void recordPluginTimings(Map<String, Double> samples, int players);
+
+    /**
+     * Reads back the per-plugin history.
+     *
+     * @param days     how far back to look
+     * @param callback receiver of plugin name to its past samples (main thread)
+     */
+    void pluginHistory(int days, Consumer<Map<String, List<PluginBaseline.Sample>>> callback);
 
     /**
      * Deletes incidents older than the retention period.
