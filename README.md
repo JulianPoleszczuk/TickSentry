@@ -24,10 +24,13 @@ Suggestion: Go there (/tp 1608 ~ 1608). Suspected farm: 841x cow.
   and, when none of them is installed, who was last standing there.
 - Times every other plugin's event handlers, so it can name the plugin that is eating the tick
   instead of blaming a chunk that did nothing wrong.
+- Remembers what each plugin used to cost, so it can say one has **become** expensive - the question
+  a live profiler cannot answer.
 - Watches memory too, so it can tell you when the freeze came from the garbage collector or from
   the server running out of RAM - things that counting mobs would never show.
-- Sends the alert to Discord, then sends a second message when the server is fine again.
-- Tells admins who are in the game, so you do not have to watch Discord.
+- Sends the alert to Discord, any JSON webhook, or console commands of your choosing, then sends a
+  second message when the server is fine again.
+- Tells admins who are in the game, with a button that teleports them to the problem.
 - Saves every incident, so you can ask what time of day your server usually struggles.
 - Has a small web page with a chart, and a /metrics endpoint for Prometheus and Grafana.
 - Can clean up after itself - sweep dropped items, thin out mob pile-ups - but only if you
@@ -158,6 +161,15 @@ discord:
   enabled: true
   webhook-url: ""            # paste your webhook link here
   mention-role-id: ""        # optional: a role to ping, numbers only
+
+webhook:                     # any other JSON endpoint - Slack, n8n, your own script
+  enabled: false
+  url: ""
+
+commands:                    # run console commands instead, see below
+  enabled: false
+  on-incident: []
+  on-recovery: []
 
 profiler:
   enabled: true              # time other plugins' event handlers
@@ -715,7 +727,7 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 282 of them, and none needs a running server.
+Run the tests with `./gradlew test`. There are 283 of them, and none needs a running server.
 
 Most cover the pure decision-making. Three files cover the parts that have to touch Bukkit, because
 those are the ones that can damage somebody else's server - or, in the monitor's case, quietly fail

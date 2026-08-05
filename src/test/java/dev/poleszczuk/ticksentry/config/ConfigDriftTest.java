@@ -3,6 +3,11 @@ package dev.poleszczuk.ticksentry.config;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -81,6 +86,24 @@ class ConfigDriftTest {
         old.set("weights.entities.COW", 2.5);
 
         assertTrue(ConfigManager.missingKeys(old, bundled()).isEmpty());
+    }
+
+    @Test
+    void theShippedConfigDoesNotReportItselfAsOutOfDate() throws Exception {
+        // The whole feature is a comparison against the bundled file, so that file has to compare
+        // clean against itself. Empty sections and empty lists are the trap: weights.entities is {}
+        // and commands.on-incident is [], and if either counted as a missing key then every server
+        // would be told its brand new config predates settings it plainly contains.
+        File shipped = new File("src/main/resources/config.yml");
+        assertTrue(shipped.isFile(), "expected to run from the project directory");
+
+        YamlConfiguration bundled;
+        try (Reader reader = new InputStreamReader(
+                new FileInputStream(shipped), StandardCharsets.UTF_8)) {
+            bundled = YamlConfiguration.loadConfiguration(reader);
+        }
+
+        assertEquals(List.of(), ConfigManager.missingKeys(bundled, bundled));
     }
 
     @Test
