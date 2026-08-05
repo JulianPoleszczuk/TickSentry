@@ -97,6 +97,7 @@ monitor:
   sustained-seconds: 10      # how long the problem must last before you get an alert
   scan-cooldown-seconds: 300 # wait this long before sending another alert
   rolling-average-ticks: 100 # how many ticks are averaged together
+  trigger-on: average        # average, p95 or p99 - see below
   recovery-alert: true       # send a message when the server is fine again
   recovery-seconds: 15       # how long it must stay fine before that message
   in-game-alerts: true       # also tell admins who are online
