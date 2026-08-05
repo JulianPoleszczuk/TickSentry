@@ -12,6 +12,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Locale;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 
 /**
@@ -61,6 +63,22 @@ public final class DashboardServer {
     private final Plugin plugin;
     private final String token;
     private final String page;
+
+    /**
+     * How many rejected requests it takes before the log says anything.
+     *
+     * <p>This is not brute-force protection - the token is 128 bits of randomness and nobody is
+     * guessing it. It is a signal that something is knocking on this port, which is worth knowing
+     * the day after an admin changes {@code bind} to {@code 0.0.0.0} and forgets what that
+     * exposed.</p>
+     */
+    private static final int REJECTIONS_BEFORE_LOGGING = 5;
+
+    /** Never more than one line per this many milliseconds, so a scanner cannot fill the log. */
+    private static final long REJECTION_LOG_INTERVAL_MILLIS = 60_000L;
+
+    private final AtomicInteger rejections = new AtomicInteger();
+    private final AtomicLong lastRejectionLogMillis = new AtomicLong();
 
     private volatile LiveSnapshot snapshot = LiveSnapshot.empty();
     private volatile MetricsSnapshot metrics = MetricsSnapshot.empty();
@@ -167,10 +185,34 @@ public final class DashboardServer {
      */
     private void handleMetrics(HttpExchange exchange) throws IOException {
         if (!authorized(exchange)) {
+            noteRejection(exchange);
             respond(exchange, 401, "text/plain; charset=utf-8", "Missing or invalid token.\n");
             return;
         }
         respond(exchange, 200, "text/plain; version=0.0.4; charset=utf-8", metrics.render());
+    }
+
+    /**
+     * Counts a rejected request and, once there have been a few, says so in the log.
+     *
+     * <p>Deliberately does not log what was presented. An admin who mistypes their own token would
+     * otherwise have a near-miss of a working token written into the file they paste into bug
+     * reports - the same reason the token itself is kept out of the startup line.</p>
+     */
+    private void noteRejection(HttpExchange exchange) {
+        if (rejections.incrementAndGet() < REJECTIONS_BEFORE_LOGGING) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        long previous = lastRejectionLogMillis.get();
+        if (now - previous < REJECTION_LOG_INTERVAL_MILLIS
+                || !lastRejectionLogMillis.compareAndSet(previous, now)) {
+            return;
+        }
+        plugin.getLogger().warning("The web panel has rejected " + rejections.get()
+                + " request(s) for a missing or wrong token, most recently from "
+                + exchange.getRemoteAddress().getAddress().getHostAddress()
+                + ". If that is not you, something is scanning this port.");
     }
 
     /** Builds the {@code /api/live} response: current state plus chart points. */
@@ -180,6 +222,7 @@ public final class DashboardServer {
 
     private void handlePage(HttpExchange exchange) throws IOException {
         if (!authorized(exchange)) {
+            noteRejection(exchange);
             respond(exchange, 401, "text/plain; charset=utf-8", "Missing or invalid token.");
             return;
         }
@@ -188,6 +231,7 @@ public final class DashboardServer {
 
     private void handleApi(HttpExchange exchange, Supplier body) throws IOException {
         if (!authorized(exchange)) {
+            noteRejection(exchange);
             respond(exchange, 401, "application/json; charset=utf-8", "{\"error\":\"unauthorized\"}");
             return;
         }
