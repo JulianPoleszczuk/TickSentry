@@ -147,6 +147,11 @@ plugins:
   all-clear: "&aNo plugin stands out - none of them is holding the tick."
   # {tasks}
   pending-tasks: "&7Pending scheduler tasks: &8{tasks}"
+  # Shown when a plugin now costs several times what it used to at a similar player count. This is
+  # the "what changed" question, which a live profiler cannot answer at all.
+  regression-header: "&6Costing more than usual:"
+  # {detail}
+  regression: "&6 - {detail}"
 
 worlds:
   empty: "&7No worlds are loaded."

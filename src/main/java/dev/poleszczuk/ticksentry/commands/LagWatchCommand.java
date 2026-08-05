@@ -6,6 +6,7 @@ import dev.poleszczuk.ticksentry.monitor.AdaptiveThreshold;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
 import dev.poleszczuk.ticksentry.monitor.LagCategory;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
+import dev.poleszczuk.ticksentry.monitor.PluginBaseline;
 import dev.poleszczuk.ticksentry.monitor.PluginProfiler;
 import dev.poleszczuk.ticksentry.monitor.PluginReport;
 import dev.poleszczuk.ticksentry.monitor.PluginTiming;
@@ -331,6 +332,16 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(report.explainsLag()
                     ? msg("report.advice", "advice", report.suggestion(plugin.messages()))
                     : msg("plugins.all-clear"));
+
+            // The listing above answers "what is expensive". This answers "what changed", which is
+            // the more useful question after an update - and no live profiler can answer it.
+            List<PluginBaseline.Regression> regressions = plugin.pluginRegressions(report);
+            if (!regressions.isEmpty()) {
+                sender.sendMessage(msg("plugins.regression-header"));
+                for (PluginBaseline.Regression regression : regressions) {
+                    sender.sendMessage(msg("plugins.regression", "detail", regression.describe()));
+                }
+            }
         }
 
         // Bukkit gives no way to time scheduled tasks from the outside, so this is a count only.

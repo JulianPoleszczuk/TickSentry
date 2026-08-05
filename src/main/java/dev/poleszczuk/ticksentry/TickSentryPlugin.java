@@ -14,7 +14,9 @@ import dev.poleszczuk.ticksentry.monitor.LagCategory;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
 import dev.poleszczuk.ticksentry.monitor.MemoryProbe;
 import dev.poleszczuk.ticksentry.monitor.MemoryWatcher;
+import dev.poleszczuk.ticksentry.monitor.PluginBaseline;
 import dev.poleszczuk.ticksentry.monitor.PluginProfiler;
+import dev.poleszczuk.ticksentry.monitor.PluginReport;
 import dev.poleszczuk.ticksentry.monitor.PluginTiming;
 import dev.poleszczuk.ticksentry.monitor.RegionLookup;
 import dev.poleszczuk.ticksentry.monitor.SparkBridge;
@@ -100,6 +102,15 @@ public final class TickSentryPlugin extends JavaPlugin {
      */
     private static final long PROFILER_INSTALL_TICKS = 20L * 60L;
 
+    /**
+     * How often (in ticks) a per-plugin cost sample is written down (10 minutes).
+     *
+     * <p>Slow on purpose. The comparison needs readings spread across days and different times of
+     * day, not a dense record of one afternoon - and at one row per plugin per sample, ten minutes
+     * keeps a month of history smaller than the incident table.</p>
+     */
+    private static final long PROFILER_SAMPLE_TICKS = 20L * 60L * 10L;
+
     private Scheduler scheduler;
     private ConfigManager configManager;
     private MessageBundle messages;
@@ -123,6 +134,14 @@ public final class TickSentryPlugin extends JavaPlugin {
     private volatile int incidentsLast24h;
     private volatile LagCategory lastCategory;
     private volatile OffenderIndex offenderIndex = OffenderIndex.empty();
+
+    /**
+     * Cached per-plugin history, refreshed off the main thread.
+     *
+     * <p>Read while assembling an alert, which happens on the main thread and must never wait on the
+     * database - the same reason {@link #offenderIndex} is cached.</p>
+     */
+    private volatile Map<String, List<PluginBaseline.Sample>> pluginHistory = Map.of();
 
     @Override
     public void onEnable() {
@@ -248,6 +267,7 @@ public final class TickSentryPlugin extends JavaPlugin {
 
         scheduler.runTimer(pluginProfiler::rotate, PROFILER_ROTATE_TICKS, PROFILER_ROTATE_TICKS);
         scheduler.runTimer(pluginProfiler::install, PROFILER_INSTALL_TICKS, PROFILER_INSTALL_TICKS);
+        scheduler.runTimer(this::samplePluginTimings, PROFILER_SAMPLE_TICKS, PROFILER_SAMPLE_TICKS);
     }
 
     /**
@@ -313,6 +333,52 @@ public final class TickSentryPlugin extends JavaPlugin {
         alertStore.stats(1, stats -> this.incidentsLast24h = stats.total());
         alertStore.offenders(configManager.offenderDays(), OFFENDERS_TRACKED,
                 offenders -> this.offenderIndex = OffenderIndex.of(offenders));
+        alertStore.pluginHistory(configManager.offenderDays(), history -> this.pluginHistory = history);
+    }
+
+    /**
+     * Writes down what each plugin is costing right now, for later comparison.
+     *
+     * <p>Every plugin measured, not only the expensive ones: the interesting case is a plugin that
+     * used to be cheap, and a top-ten cut would have no record of what it was before it climbed.</p>
+     */
+    private void samplePluginTimings() {
+        if (!pluginProfiler.isRunning()) {
+            return;
+        }
+        PluginReport report = pluginProfiler.report(configManager.profilerWindowSeconds());
+        if (report.isEmpty()) {
+            return;
+        }
+        Map<String, Double> shares = new LinkedHashMap<>();
+        for (PluginTiming timing : report.timings()) {
+            shares.put(timing.pluginName(), timing.share(report.windowNanos()));
+        }
+        alertStore.recordPluginTimings(shares, getServer().getOnlinePlayers().size());
+    }
+
+    /**
+     * Looks for plugins that now cost materially more than they used to.
+     *
+     * @param report the current measurements
+     * @return regressions worth reporting, worst first, never {@code null}
+     */
+    public List<PluginBaseline.Regression> pluginRegressions(PluginReport report) {
+        if (report.isEmpty()) {
+            return List.of();
+        }
+        Map<String, List<PluginBaseline.Sample>> history = pluginHistory;
+        int players = getServer().getOnlinePlayers().size();
+        List<PluginBaseline.Regression> found = new ArrayList<>();
+        for (PluginTiming timing : report.timings()) {
+            PluginBaseline.Regression regression = PluginBaseline.compare(timing.pluginName(),
+                    timing.share(report.windowNanos()), players, history.get(timing.pluginName()));
+            if (regression != null) {
+                found.add(regression);
+            }
+        }
+        found.sort((left, right) -> Double.compare(right.ratio(), left.ratio()));
+        return found;
     }
 
     /** @return the current repeat offender ranking, never {@code null} */
@@ -465,6 +531,13 @@ public final class TickSentryPlugin extends JavaPlugin {
         }
         if (event.pluginNote() != null) {
             getLogger().warning("Plugin: " + event.pluginNote());
+        }
+        // Worth saying at the moment of the incident, not only when somebody thinks to run
+        // /lagwatch plugins: "this got three times more expensive since last week" is the sentence
+        // that turns an alert into a cause.
+        for (PluginBaseline.Regression regression
+                : pluginRegressions(pluginProfiler.report(configManager.profilerWindowSeconds()))) {
+            getLogger().warning("Changed: " + regression.describe());
         }
         if (event.chunkLoadNote() != null) {
             getLogger().warning("Chunk loading: " + event.chunkLoadNote());
