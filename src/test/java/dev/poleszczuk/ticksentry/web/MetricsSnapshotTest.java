@@ -53,6 +53,20 @@ class MetricsSnapshotTest {
     }
 
     @Test
+    void chunksThatCouldNotBeCountedAreOmittedRatherThanReportedAsZero() {
+        // On a server that will not let one thread read every world, zero would read as an empty
+        // server and quietly break any "chunks per player" query.
+        MetricsSnapshot uncounted = new MetricsSnapshot(19.87D, 12.5D, 35.0D, 210.0D, 48.0D, 50.0D,
+                12, true, false, 3, 1_073_741_824L, 4_294_967_296L, 4L, 120L, -1, 2, Map.of(),
+                1_754_308_800_000L);
+
+        String text = uncounted.render();
+
+        assertFalse(text.contains("ticksentry_loaded_chunks"));
+        assertTrue(text.contains("ticksentry_players"), "everything else is still exported");
+    }
+
+    @Test
     void aJvmWithoutAHeapLimitExportsNoLimit() {
         // -1 as a limit would break every "percent of heap used" query built on top of it.
         String text = sample(-1L, Map.of()).render();

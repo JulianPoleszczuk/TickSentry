@@ -387,9 +387,15 @@ public final class TickSentryPlugin extends JavaPlugin {
     private MetricsSnapshot collectMetrics() {
         MemoryProbe.MemorySample memory = memoryWatcher.sample();
 
-        int loadedChunks = 0;
-        for (World world : getServer().getWorlds()) {
-            loadedChunks += world.getLoadedChunks().length;
+        // Reading a world's loaded chunks is reading region-owned state, so it is off limits
+        // wherever the chunk scan is. Exported as -1, which Prometheus treats as a value: a
+        // gauge silently reporting 0 chunks would look like an empty server.
+        int loadedChunks = -1;
+        if (worldScanAllowed) {
+            loadedChunks = 0;
+            for (World world : getServer().getWorlds()) {
+                loadedChunks += world.getLoadedChunks().length;
+            }
         }
 
         Map<String, Double> pluginSeconds = new LinkedHashMap<>();

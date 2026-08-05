@@ -123,7 +123,11 @@ public final class MetricsSnapshot {
         gauge(text, "ticksentry_incidents_24h", "Incidents recorded in the last 24 hours", incidents24h);
         gauge(text, "ticksentry_repeat_offender_chunks",
                 "Chunks that have been behind more than one incident", repeatOffenders);
-        gauge(text, "ticksentry_loaded_chunks", "Chunks loaded across all worlds", loadedChunks);
+        if (loadedChunks >= 0) {
+            // Negative means the server would not let us count them. Exporting 0 would read as an
+            // empty server, and every "chunks per player" query built on it would be wrong.
+            gauge(text, "ticksentry_loaded_chunks", "Chunks loaded across all worlds", loadedChunks);
+        }
         gauge(text, "ticksentry_heap_used_bytes", "Heap currently in use", heapUsedBytes);
         if (heapMaxBytes > 0L) {
             // A JVM without -Xmx reports -1, and exporting that as a limit would break any
