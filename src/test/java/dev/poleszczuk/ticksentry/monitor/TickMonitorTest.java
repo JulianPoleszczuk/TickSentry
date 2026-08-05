@@ -3,6 +3,7 @@ package dev.poleszczuk.ticksentry.monitor;
 import dev.poleszczuk.ticksentry.config.AdaptiveSettings;
 import dev.poleszczuk.ticksentry.config.MonitorSettings;
 import dev.poleszczuk.ticksentry.config.TriggerMetric;
+import dev.poleszczuk.ticksentry.util.Scheduler;
 import org.bukkit.Server;
 import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,33 @@ class TickMonitorTest {
 
     /** Window size used throughout - the smallest the configuration allows. */
     private static final int WINDOW = 20;
+
+    /**
+     * A scheduler that never runs anything.
+     *
+     * <p>These tests drive {@link TickMonitor#run()} by hand rather than through {@code start()},
+     * which is the only reason the awkward moments in the state machine are reachable at all.</p>
+     */
+    private static final Scheduler NO_SCHEDULER = new Scheduler() {
+        @Override
+        public void run(Runnable task) {
+        }
+
+        @Override
+        public void runLater(Runnable task, long delayTicks) {
+        }
+
+        @Override
+        public Handle runTimer(Runnable task, long delayTicks, long periodTicks) {
+            return () -> {
+            };
+        }
+
+        @Override
+        public boolean canCountPendingTasks() {
+            return true;
+        }
+    };
 
     @Test
     void nothingIsJudgedUntilTheWindowIsFull() {
@@ -307,7 +335,7 @@ class TickMonitorTest {
             this.ticks = raw ? new long[WINDOW * 2] : null;
             Server server = fakeServer(() -> mspt, ticks);
             Plugin plugin = fakePlugin(server);
-            this.monitor = new TickMonitor(plugin, new Settings(triggerOn),
+            this.monitor = new TickMonitor(plugin, NO_SCHEDULER, new Settings(triggerOn),
                     new AdaptiveThreshold(AdaptiveSettings.disabled(), 5),
                     () -> {
                         alerts++;

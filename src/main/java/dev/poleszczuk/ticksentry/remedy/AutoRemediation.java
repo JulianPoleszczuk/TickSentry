@@ -2,6 +2,7 @@ package dev.poleszczuk.ticksentry.remedy;
 
 import dev.poleszczuk.ticksentry.config.MessageBundle;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
+import dev.poleszczuk.ticksentry.util.Scheduler;
 import org.bukkit.Chunk;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
@@ -34,6 +35,7 @@ import java.util.function.Supplier;
 public final class AutoRemediation {
 
     private final Plugin plugin;
+    private final Scheduler scheduler;
     private final Supplier<RemedySettings> settings;
     private final Consumer<String> reporter;
     private final MessageBundle messages;
@@ -41,14 +43,16 @@ public final class AutoRemediation {
     private long lastRunMillis;
 
     /**
-     * @param plugin   plugin instance (scheduler, worlds, logging)
-     * @param settings current settings, re-read so {@code /lagwatch reload} takes effect
-     * @param reporter receives a summary of what happened, for the log and Discord
-     * @param messages the warning players see, so it can be translated
+     * @param plugin    plugin instance (worlds, logging)
+     * @param scheduler where the delayed removal is queued
+     * @param settings  current settings, re-read so {@code /lagwatch reload} takes effect
+     * @param reporter  receives a summary of what happened, for the log and Discord
+     * @param messages  the warning players see, so it can be translated
      */
-    public AutoRemediation(Plugin plugin, Supplier<RemedySettings> settings, Consumer<String> reporter,
-                           MessageBundle messages) {
+    public AutoRemediation(Plugin plugin, Scheduler scheduler, Supplier<RemedySettings> settings,
+                           Consumer<String> reporter, MessageBundle messages) {
         this.plugin = plugin;
+        this.scheduler = scheduler;
         this.settings = settings;
         this.reporter = reporter;
         this.messages = messages;
@@ -89,8 +93,7 @@ public final class AutoRemediation {
         for (RemedyAction action : actions) {
             warn(action, current.warningSeconds());
         }
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> run(actions),
-                Math.max(1L, current.warningSeconds() * 20L));
+        scheduler.runLater(() -> run(actions), Math.max(1L, current.warningSeconds() * 20L));
         return actions;
     }
 

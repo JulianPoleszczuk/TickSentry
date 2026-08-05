@@ -58,6 +58,7 @@ public final class BStatsReporter {
     private static final long INTERVAL_TICKS = 20L * 60L * 30L;
 
     private final Plugin plugin;
+    private final Scheduler scheduler;
     private final Map<String, String> charts = new LinkedHashMap<>();
 
     private UUID serverUuid;
@@ -67,10 +68,12 @@ public final class BStatsReporter {
     private volatile boolean firstSubmission = true;
 
     /**
-     * @param plugin plugin instance, for the scheduler, the data folder and its version
+     * @param plugin    plugin instance, for the data folder and its version
+     * @param scheduler where the periodic submission is queued
      */
-    public BStatsReporter(Plugin plugin) {
+    public BStatsReporter(Plugin plugin, Scheduler scheduler) {
         this.plugin = plugin;
+        this.scheduler = scheduler;
     }
 
     /**
@@ -102,7 +105,7 @@ public final class BStatsReporter {
         // One client for the life of the plugin. Building one per submission would spin up a
         // fresh connection pool and thread every half hour for a single request.
         this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-        plugin.getServer().getScheduler().runTaskTimer(plugin, this::submit, FIRST_DELAY_TICKS, INTERVAL_TICKS);
+        scheduler.runTimer(this::submit, FIRST_DELAY_TICKS, INTERVAL_TICKS);
         return true;
     }
 

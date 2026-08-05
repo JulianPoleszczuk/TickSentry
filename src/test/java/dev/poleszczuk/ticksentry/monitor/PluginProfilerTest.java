@@ -1,5 +1,6 @@
 package dev.poleszczuk.ticksentry.monitor;
 
+import dev.poleszczuk.ticksentry.util.Scheduler;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
@@ -31,6 +32,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class PluginProfilerTest {
 
+    /** A scheduler whose queue can be counted - Paper and Spigot. */
+    private static final Scheduler COUNTING = scheduler(true);
+
+    /** A scheduler with no queue to count - Folia. */
+    private static final Scheduler NO_QUEUE = scheduler(false);
+
     private Plugin owner;
     private Plugin other;
 
@@ -53,7 +60,7 @@ class PluginProfilerTest {
                 EventPriority.HIGHEST, other, true);
         ProbeEvent.getHandlerList().register(original);
 
-        PluginProfiler profiler = new PluginProfiler(owner);
+        PluginProfiler profiler = new PluginProfiler(owner, COUNTING);
         profiler.start();
 
         RegisteredListener[] after = ProbeEvent.getHandlerList().getRegisteredListeners();
@@ -71,7 +78,7 @@ class PluginProfilerTest {
         AtomicInteger calls = new AtomicInteger();
         register(other, (l, e) -> calls.incrementAndGet());
 
-        PluginProfiler profiler = new PluginProfiler(owner);
+        PluginProfiler profiler = new PluginProfiler(owner, COUNTING);
         profiler.start();
         fire(new ProbeEvent());
 
@@ -84,7 +91,7 @@ class PluginProfilerTest {
                 EventPriority.NORMAL, other, false);
         ProbeEvent.getHandlerList().register(original);
 
-        PluginProfiler profiler = new PluginProfiler(owner);
+        PluginProfiler profiler = new PluginProfiler(owner, COUNTING);
         profiler.start();
         profiler.stop();
 
@@ -97,7 +104,7 @@ class PluginProfilerTest {
     void installingAgainDoesNotWrapTheWrapper() {
         register(other, (l, e) -> { });
 
-        PluginProfiler profiler = new PluginProfiler(owner);
+        PluginProfiler profiler = new PluginProfiler(owner, COUNTING);
         profiler.start();
         int afterFirst = profiler.wrappedListeners();
         // install() runs on a timer to catch listeners registered later; running it against
@@ -115,7 +122,7 @@ class PluginProfilerTest {
                 EventPriority.MONITOR, owner, false);
         ProbeEvent.getHandlerList().register(ours);
 
-        PluginProfiler profiler = new PluginProfiler(owner);
+        PluginProfiler profiler = new PluginProfiler(owner, COUNTING);
         profiler.start();
 
         assertSame(ours, ProbeEvent.getHandlerList().getRegisteredListeners()[0]);
@@ -126,7 +133,7 @@ class PluginProfilerTest {
     void synchronousHandlerTimeIsAttributedToTheRightPlugin() throws Exception {
         register(other, (l, e) -> burnAMillisecond());
 
-        PluginProfiler profiler = new PluginProfiler(owner);
+        PluginProfiler profiler = new PluginProfiler(owner, COUNTING);
         profiler.start();
         fire(new ProbeEvent());
 
@@ -147,7 +154,7 @@ class PluginProfilerTest {
             calls.incrementAndGet();
         });
 
-        PluginProfiler profiler = new PluginProfiler(owner);
+        PluginProfiler profiler = new PluginProfiler(owner, COUNTING);
         profiler.start();
         fire(new ProbeEvent(true));
 
@@ -160,7 +167,7 @@ class PluginProfilerTest {
     void severalCallsAccumulateIntoOneEntry() throws Exception {
         register(other, (l, e) -> burnAMillisecond());
 
-        PluginProfiler profiler = new PluginProfiler(owner);
+        PluginProfiler profiler = new PluginProfiler(owner, COUNTING);
         profiler.start();
         for (int i = 0; i < 5; i++) {
             fire(new ProbeEvent());
@@ -173,7 +180,7 @@ class PluginProfilerTest {
     void stoppingForgetsEveryMeasurement() throws Exception {
         register(other, (l, e) -> burnAMillisecond());
 
-        PluginProfiler profiler = new PluginProfiler(owner);
+        PluginProfiler profiler = new PluginProfiler(owner, COUNTING);
         profiler.start();
         fire(new ProbeEvent());
         assertFalse(profiler.report(60).isEmpty());
@@ -187,7 +194,7 @@ class PluginProfilerTest {
 
     @Test
     void aProfilerThatWasNeverStartedMeasuresNothing() {
-        PluginProfiler profiler = new PluginProfiler(owner);
+        PluginProfiler profiler = new PluginProfiler(owner, COUNTING);
 
         assertFalse(profiler.isRunning());
         assertTrue(profiler.report(60).isEmpty());
@@ -200,8 +207,41 @@ class PluginProfilerTest {
     @Test
     void aServerThatCannotAnswerCostsTheCountNotTheAlert() {
         // The fake plugin has no server behind it, exactly like one shutting down.
-        assertNotNull(new PluginProfiler(owner).pendingTasks());
-        assertTrue(new PluginProfiler(owner).pendingTasks().isEmpty());
+        assertNotNull(new PluginProfiler(owner, COUNTING).pendingTasks());
+        assertTrue(new PluginProfiler(owner, COUNTING).pendingTasks().isEmpty());
+    }
+
+    @Test
+    void aSchedulerWithNoQueueIsNotAskedForOne() {
+        // Folia has no task queue to count. Asking anyway would throw; answering zero would imply
+        // every plugin on the server is idle. An empty map leaves the line out of the report.
+        PluginProfiler profiler = new PluginProfiler(owner, NO_QUEUE);
+
+        assertTrue(profiler.pendingTasks().isEmpty());
+    }
+
+    /** A scheduler that runs nothing - none of these tests schedules anything. */
+    private static Scheduler scheduler(boolean canCountPendingTasks) {
+        return new Scheduler() {
+            @Override
+            public void run(Runnable task) {
+            }
+
+            @Override
+            public void runLater(Runnable task, long delayTicks) {
+            }
+
+            @Override
+            public Handle runTimer(Runnable task, long delayTicks, long periodTicks) {
+                return () -> {
+                };
+            }
+
+            @Override
+            public boolean canCountPendingTasks() {
+                return canCountPendingTasks;
+            }
+        };
     }
 
     /** Registers a handler owned by the given plugin on the probe event. */

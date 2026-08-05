@@ -1,5 +1,6 @@
 package dev.poleszczuk.ticksentry.monitor;
 
+import dev.poleszczuk.ticksentry.util.Scheduler;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventException;
 import org.bukkit.event.HandlerList;
@@ -39,6 +40,7 @@ public final class PluginProfiler {
     private static final long MAX_HISTORY_MILLIS = 300_000L;
 
     private final Plugin owner;
+    private final Scheduler scheduler;
 
     /** Live counters, written by whichever thread fires the event, reset on every rotation. */
     private final Map<String, Map<String, Counter>> live = new ConcurrentHashMap<>();
@@ -51,10 +53,12 @@ public final class PluginProfiler {
     private int wrappedListeners;
 
     /**
-     * @param owner plugin instance, used for the scheduler and to skip TickSentry's own listeners
+     * @param owner     plugin instance, used to skip TickSentry's own listeners
+     * @param scheduler the server's scheduler, asked whether its queue can be counted at all
      */
-    public PluginProfiler(Plugin owner) {
+    public PluginProfiler(Plugin owner, Scheduler scheduler) {
         this.owner = owner;
+        this.scheduler = scheduler;
     }
 
     /** @return whether the profiler is installed and measuring */
@@ -237,6 +241,11 @@ public final class PluginProfiler {
      */
     public Map<String, Integer> pendingTasks() {
         Map<String, Integer> counts = new HashMap<>();
+        if (!scheduler.canCountPendingTasks()) {
+            // Folia has no queue to count. An empty map leaves the line out of the report, rather
+            // than printing zeroes and implying every plugin on the server is idle.
+            return counts;
+        }
         try {
             for (BukkitTask task : owner.getServer().getScheduler().getPendingTasks()) {
                 Plugin plugin = task.getOwner();

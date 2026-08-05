@@ -28,6 +28,7 @@ import dev.poleszczuk.ticksentry.storage.SqliteAlertStore;
 import dev.poleszczuk.ticksentry.storage.StoredIncident;
 import dev.poleszczuk.ticksentry.util.BStatsReporter;
 import dev.poleszczuk.ticksentry.util.FoliaSupport;
+import dev.poleszczuk.ticksentry.util.Scheduler;
 import dev.poleszczuk.ticksentry.util.UpdateChecker;
 import dev.poleszczuk.ticksentry.web.DashboardServer;
 import dev.poleszczuk.ticksentry.web.LiveSnapshot;
@@ -96,6 +97,7 @@ public final class TickSentryPlugin extends JavaPlugin {
      */
     private static final long PROFILER_INSTALL_TICKS = 20L * 60L;
 
+    private Scheduler scheduler;
     private ConfigManager configManager;
     private MessageBundle messages;
     private TickMonitor tickMonitor;
@@ -126,26 +128,28 @@ public final class TickSentryPlugin extends JavaPlugin {
             return;
         }
         saveDefaultConfig();
+        this.scheduler = Scheduler.forPlugin(this);
         this.configManager = new ConfigManager(this);
         this.configManager.reportOutdatedConfig();
         this.messages = new MessageBundle(this);
         this.alertStore = openStore();
         this.sparkBridge = new SparkBridge(this);
         this.memoryWatcher = new MemoryWatcher(MEMORY_POLL_TICKS * 50L, messages);
-        this.pluginProfiler = new PluginProfiler(this);
+        this.pluginProfiler = new PluginProfiler(this, scheduler);
         this.chunkVisitors = new ChunkVisitors();
         this.regionLookup = new RegionLookup(this);
         this.chunkLoadRate = new ChunkLoadRate((int) (MEMORY_POLL_TICKS / 20L));
-        this.scanner = new ChunkHotspotScanner(this, configManager, sparkBridge, memoryWatcher, pluginProfiler,
-                new ChunkAttribution(this, chunkVisitors, regionLookup, this::offenderIndex),
+        this.scanner = new ChunkHotspotScanner(this, scheduler, configManager, sparkBridge, memoryWatcher,
+                pluginProfiler, new ChunkAttribution(this, chunkVisitors, regionLookup, this::offenderIndex),
                 chunkLoadRate, messages);
         getServer().getPluginManager().registerEvents(chunkVisitors, this);
         getServer().getPluginManager().registerEvents(chunkLoadRate, this);
         this.webhook = new DiscordWebhookClient(this, configManager, messages, this::effectiveThresholdMs);
-        this.remediation = new AutoRemediation(this, configManager::remedySettings, this::reportRemediation, messages);
+        this.remediation = new AutoRemediation(this, scheduler, configManager::remedySettings,
+                this::reportRemediation, messages);
         this.adaptiveThreshold = new AdaptiveThreshold(configManager.adaptiveSettings(),
                 (int) (MEMORY_POLL_TICKS / 20L));
-        this.tickMonitor = new TickMonitor(this, configManager, adaptiveThreshold,
+        this.tickMonitor = new TickMonitor(this, scheduler, configManager, adaptiveThreshold,
                 this::handleSustainedLag, this::handleRecovery);
         this.tickMonitor.start();
 
@@ -161,11 +165,10 @@ public final class TickSentryPlugin extends JavaPlugin {
         startStatistics();
         startDashboard();
         startPluginProfiler();
-        getServer().getScheduler().runTaskTimer(this, this::pollHealth, MEMORY_POLL_TICKS, MEMORY_POLL_TICKS);
-        getServer().getScheduler().runTaskTimer(this,
-                () -> alertStore.prune(configManager.storageKeepDays()), PRUNE_TICKS, PRUNE_TICKS);
+        scheduler.runTimer(this::pollHealth, MEMORY_POLL_TICKS, MEMORY_POLL_TICKS);
+        scheduler.runTimer(() -> alertStore.prune(configManager.storageKeepDays()), PRUNE_TICKS, PRUNE_TICKS);
         // First read after a second, so the panel and placeholders do not show zero for a whole minute.
-        getServer().getScheduler().runTaskTimer(this, this::refreshCounters, 20L, COUNTER_REFRESH_TICKS);
+        scheduler.runTimer(this::refreshCounters, 20L, COUNTER_REFRESH_TICKS);
 
         getLogger().info("TickSentry active - threshold " + configManager.msptThresholdMs()
                 + " ms for " + configManager.sustainedSeconds() + " s. History: " + alertStore.describe() + ".");
@@ -203,7 +206,7 @@ public final class TickSentryPlugin extends JavaPlugin {
         if (!configManager.storageEnabled()) {
             return new MemoryAlertStore(MEMORY_CAPACITY);
         }
-        AlertStore store = SqliteAlertStore.open(this,
+        AlertStore store = SqliteAlertStore.open(this, scheduler,
                 new File(getDataFolder(), "incidents.db"), configManager.storageKeepDays());
         return store != null ? store : new MemoryAlertStore(MEMORY_CAPACITY);
     }
@@ -220,15 +223,13 @@ public final class TickSentryPlugin extends JavaPlugin {
             getLogger().info("Plugin profiling is off - alerts will not be able to name a plugin.");
             return;
         }
-        getServer().getScheduler().runTaskLater(this, () -> {
+        scheduler.runLater(() -> {
             pluginProfiler.start();
             getLogger().info("Profiling " + pluginProfiler.wrappedListeners() + " event handlers from other plugins.");
         }, 1L);
 
-        getServer().getScheduler().runTaskTimer(this, pluginProfiler::rotate,
-                PROFILER_ROTATE_TICKS, PROFILER_ROTATE_TICKS);
-        getServer().getScheduler().runTaskTimer(this, pluginProfiler::install,
-                PROFILER_INSTALL_TICKS, PROFILER_INSTALL_TICKS);
+        scheduler.runTimer(pluginProfiler::rotate, PROFILER_ROTATE_TICKS, PROFILER_ROTATE_TICKS);
+        scheduler.runTimer(pluginProfiler::install, PROFILER_INSTALL_TICKS, PROFILER_INSTALL_TICKS);
     }
 
     /**
@@ -257,7 +258,7 @@ public final class TickSentryPlugin extends JavaPlugin {
         if (!configManager.bstatsEnabled()) {
             return;
         }
-        BStatsReporter reporter = new BStatsReporter(this);
+        BStatsReporter reporter = new BStatsReporter(this, scheduler);
         reporter.chart("minecraft_version", getServer().getBukkitVersion().split("-")[0]);
         reporter.chart("discord_configured", String.valueOf(configManager.discordEnabled()));
         reporter.chart("profiler_enabled", String.valueOf(configManager.profilerEnabled()));
@@ -326,7 +327,7 @@ public final class TickSentryPlugin extends JavaPlugin {
         }
 
         // Snapshots and samples are taken by the main thread; HTTP handlers only read them.
-        getServer().getScheduler().runTaskTimer(this, () -> {
+        scheduler.runTimer(() -> {
             LiveSnapshot snapshot = collectSnapshot();
             history.add(snapshot.generatedAt(), snapshot.mspt(), snapshot.tps());
             server.update(snapshot);
@@ -335,7 +336,7 @@ public final class TickSentryPlugin extends JavaPlugin {
             }
         }, SAMPLE_TICKS, SAMPLE_TICKS);
 
-        getServer().getScheduler().runTaskTimer(this, () -> alertStore.recent(DASHBOARD_INCIDENTS_SHOWN,
+        scheduler.runTimer(() -> alertStore.recent(DASHBOARD_INCIDENTS_SHOWN,
                         incidents -> server.updateIncidents(StoredIncident.toJsonArray(incidents))),
                 20L, DASHBOARD_INCIDENTS_TICKS);
     }

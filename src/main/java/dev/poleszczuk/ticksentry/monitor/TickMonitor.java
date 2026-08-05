@@ -1,9 +1,9 @@
 package dev.poleszczuk.ticksentry.monitor;
 
 import dev.poleszczuk.ticksentry.config.MonitorSettings;
+import dev.poleszczuk.ticksentry.util.Scheduler;
 import org.bukkit.Server;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.util.function.LongConsumer;
 import java.util.function.LongSupplier;
@@ -28,6 +28,7 @@ public final class TickMonitor implements Runnable {
     private static final double TARGET_TICK_MS = 50.0D;
 
     private final Plugin plugin;
+    private final Scheduler scheduler;
     private final MonitorSettings config;
     private final AdaptiveThreshold adaptive;
     private final Server server;
@@ -55,7 +56,7 @@ public final class TickMonitor implements Runnable {
     private long lastTickNanos;
     private long breachStartMillis = -1L;
     private long lastAlertMillis = 0L;
-    private BukkitTask task;
+    private Scheduler.Handle task;
 
     private boolean inIncident;
     private long incidentStartMillis = -1L;
@@ -68,21 +69,24 @@ public final class TickMonitor implements Runnable {
      * @param onSustainedLag action run on the main thread once sustained lag is detected
      * @param onRecovered    action run once the server recovers, with the incident length in seconds
      */
-    public TickMonitor(Plugin plugin, MonitorSettings config, AdaptiveThreshold adaptive,
-                       Runnable onSustainedLag, LongConsumer onRecovered) {
-        this(plugin, config, adaptive, onSustainedLag, onRecovered, System::currentTimeMillis);
+    public TickMonitor(Plugin plugin, Scheduler scheduler, MonitorSettings config,
+                       AdaptiveThreshold adaptive, Runnable onSustainedLag, LongConsumer onRecovered) {
+        this(plugin, scheduler, config, adaptive, onSustainedLag, onRecovered,
+                System::currentTimeMillis);
     }
 
     /**
-     * @param plugin         plugin instance (used for the scheduler)
+     * @param plugin         plugin instance (logging)
+     * @param scheduler      where the per-tick job is queued
      * @param config         source of thresholds and time windows
      * @param adaptive       threshold that learns this server's normal tick time
      * @param onSustainedLag action run on the main thread once sustained lag is detected
      * @param onRecovered    action run once the server recovers, with the incident length in seconds
      * @param clock          source of the current time in milliseconds
      */
-    TickMonitor(Plugin plugin, MonitorSettings config, AdaptiveThreshold adaptive,
+    TickMonitor(Plugin plugin, Scheduler scheduler, MonitorSettings config, AdaptiveThreshold adaptive,
                 Runnable onSustainedLag, LongConsumer onRecovered, LongSupplier clock) {
+        this.scheduler = scheduler;
         this.plugin = plugin;
         this.config = config;
         this.adaptive = adaptive;
@@ -102,7 +106,7 @@ public final class TickMonitor implements Runnable {
     /** Starts measuring - a synchronous task running every tick. */
     public void start() {
         if (task == null) {
-            task = server.getScheduler().runTaskTimer(plugin, this, 1L, 1L);
+            task = scheduler.runTimer(this, 1L, 1L);
         }
     }
 

@@ -2,6 +2,7 @@ package dev.poleszczuk.ticksentry.storage;
 
 import dev.poleszczuk.ticksentry.monitor.LagCategory;
 import dev.poleszczuk.ticksentry.monitor.LagEvent;
+import dev.poleszczuk.ticksentry.util.Scheduler;
 import org.bukkit.plugin.Plugin;
 import org.sqlite.SQLiteDataSource;
 
@@ -66,12 +67,14 @@ public final class SqliteAlertStore implements AlertStore {
             "SELECT " + COLUMNS + " FROM incidents WHERE ts >= ? ORDER BY ts DESC";
 
     private final Plugin plugin;
+    private final Scheduler scheduler;
     private final Connection connection;
     private final ExecutorService executor;
     private final File file;
 
-    private SqliteAlertStore(Plugin plugin, File file, Connection connection) {
+    private SqliteAlertStore(Plugin plugin, Scheduler scheduler, File file, Connection connection) {
         this.plugin = plugin;
+        this.scheduler = scheduler;
         this.file = file;
         this.connection = connection;
         this.executor = Executors.newSingleThreadExecutor(runnable -> {
@@ -84,12 +87,13 @@ public final class SqliteAlertStore implements AlertStore {
     /**
      * Opens (and creates if needed) the incident database.
      *
-     * @param plugin   plugin instance
-     * @param file     database file
-     * @param keepDays after how many days old rows are deleted (0 = never)
+     * @param plugin    plugin instance
+     * @param scheduler where read results are handed back to the server thread
+     * @param file      database file
+     * @param keepDays  after how many days old rows are deleted (0 = never)
      * @return ready store, or {@code null} when the database cannot be opened
      */
-    public static SqliteAlertStore open(Plugin plugin, File file, int keepDays) {
+    public static SqliteAlertStore open(Plugin plugin, Scheduler scheduler, File file, int keepDays) {
         try {
             File parent = file.getParentFile();
             if (parent != null && !parent.exists() && !parent.mkdirs()) {
@@ -105,7 +109,7 @@ public final class SqliteAlertStore implements AlertStore {
                 statement.executeUpdate(INDEX);
             }
 
-            SqliteAlertStore store = new SqliteAlertStore(plugin, file, connection);
+            SqliteAlertStore store = new SqliteAlertStore(plugin, scheduler, file, connection);
             store.prune(keepDays);
             return store;
         } catch (SQLException | RuntimeException | NoClassDefFoundError ex) {
@@ -288,6 +292,6 @@ public final class SqliteAlertStore implements AlertStore {
         if (!plugin.isEnabled()) {
             return;
         }
-        plugin.getServer().getScheduler().runTask(plugin, () -> callback.accept(value));
+        scheduler.run(() -> callback.accept(value));
     }
 }

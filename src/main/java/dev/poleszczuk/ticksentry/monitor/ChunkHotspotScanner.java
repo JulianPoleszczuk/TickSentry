@@ -2,13 +2,13 @@ package dev.poleszczuk.ticksentry.monitor;
 
 import dev.poleszczuk.ticksentry.config.ConfigManager;
 import dev.poleszczuk.ticksentry.config.Messages;
+import dev.poleszczuk.ticksentry.util.Scheduler;
 import org.bukkit.Chunk;
 import org.bukkit.World;
 import org.bukkit.block.BlockState;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -41,6 +41,7 @@ public final class ChunkHotspotScanner {
     private static final long BUDGET_NANOS = BUDGET_MILLIS * 1_000_000L;
 
     private final Plugin plugin;
+    private final Scheduler scheduler;
     private final ConfigManager config;
     private final SparkBridge spark;
     private final MemoryWatcher memory;
@@ -51,7 +52,8 @@ public final class ChunkHotspotScanner {
     private boolean scanning;
 
     /**
-     * @param plugin      plugin instance (server and scheduler access)
+     * @param plugin      plugin instance (server access and logging)
+     * @param scheduler   where the tick-by-tick scan slices are queued
      * @param config      source of ignored worlds and the result limit
      * @param spark       optional source of extra statistics
      * @param memory      memory and garbage collector readings
@@ -60,10 +62,11 @@ public final class ChunkHotspotScanner {
      * @param chunkLoadRate how fast chunks are coming into memory
      * @param messages      translation lookup for the advice sentences
      */
-    public ChunkHotspotScanner(Plugin plugin, ConfigManager config, SparkBridge spark,
+    public ChunkHotspotScanner(Plugin plugin, Scheduler scheduler, ConfigManager config, SparkBridge spark,
                                MemoryWatcher memory, PluginProfiler profiler, ChunkAttribution attribution,
                                ChunkLoadRate chunkLoadRate, Messages messages) {
         this.messages = messages == null ? Messages.none() : messages;
+        this.scheduler = scheduler;
         this.plugin = plugin;
         this.config = config;
         this.spark = spark;
@@ -103,8 +106,31 @@ public final class ChunkHotspotScanner {
             Collections.addAll(queue, world.getLoadedChunks());
         }
         scanning = true;
-        new ScanTask(queue, tps, mspt, peakMs, manual, callback).runTaskTimer(plugin, 0L, 1L);
+        ScanTask task = new ScanTask(queue, tps, mspt, peakMs, manual, callback);
+        // Assigned before the first run: a zero delay still means "next tick", never inline.
+        task.handle = scheduler.runTimer(task, 0L, 1L);
         return true;
+    }
+
+    /**
+     * Builds an incident without looking at the world at all.
+     *
+     * <p>For servers where walking loaded chunks is not allowed - Folia ticks each region on its own
+     * thread, so reading them from anywhere else is reading somebody else's memory. Everything that
+     * does not depend on the world still works: memory, the garbage collector, per-plugin handler
+     * time, how fast chunks are being loaded. An alert can still name a plugin; it just cannot name
+     * a chunk.</p>
+     *
+     * @param tps    current TPS
+     * @param mspt   current average MSPT
+     * @param peakMs longest gap between ticks in the window
+     * @param manual whether the report was asked for by a command
+     * @return incident with no chunk findings
+     */
+    public LagEvent reportWithoutChunks(double tps, double mspt, double peakMs, boolean manual) {
+        return LagEvent.of(tps, mspt, peakMs, 0, 0, List.of(), 0L, manual,
+                spark.summary(), memory.verdict(), config.costWeights(),
+                profiler.report(config.profilerWindowSeconds()), chunkLoadRate.verdict(), messages);
     }
 
     /** Turns raw Bukkit arrays into an API-independent chunk snapshot. */
@@ -128,7 +154,9 @@ public final class ChunkHotspotScanner {
     }
 
     /** Processes the chunk queue in slices, yielding once the per-tick budget runs out. */
-    private final class ScanTask extends BukkitRunnable {
+    private final class ScanTask implements Runnable {
+
+        private Scheduler.Handle handle;
 
         private final List<Chunk> queue;
         private final List<ChunkStat> stats = new ArrayList<>();
@@ -178,7 +206,9 @@ public final class ChunkHotspotScanner {
                 }
             }
 
-            cancel();
+            if (handle != null) {
+                handle.cancel();
+            }
             scanning = false;
             finish();
         }
