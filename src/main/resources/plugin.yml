@@ -17,7 +17,8 @@ libraries:
 commands:
   lagwatch:
     description: Manage lag monitoring.
-    usage: /lagwatch <status|report|plugins|history|stats|reload>
+    # Keep this in step with command.usage in messages.yml and SUBCOMMANDS in LagWatchCommand.
+    usage: /lagwatch <status|report|plugins|history|offenders|stats|reload>
     aliases: [ts, ticksentry]
     permission: ticksentry.admin
 
