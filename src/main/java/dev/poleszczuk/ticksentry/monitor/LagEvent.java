@@ -30,6 +30,8 @@ public final class LagEvent {
     private final String memoryNote;
     private final String pluginNote;
     private final String chunkLoadNote;
+    private final double p95Ms;
+    private final double p99Ms;
 
     /**
      * @param timestamp       when it was detected
@@ -52,6 +54,36 @@ public final class LagEvent {
                     int totalEntities, List<ChunkStat> topChunks, LagCategory category, String suggestedAction,
                     long scanDurationMs, boolean manual, String sparkSummary, String memoryNote,
                     String pluginNote, String chunkLoadNote) {
+        this(timestamp, tps, averageMspt, peakMs, loadedChunks, totalEntities, topChunks, category,
+                suggestedAction, scanDurationMs, manual, sparkSummary, memoryNote, pluginNote,
+                chunkLoadNote, 0.0D, 0.0D);
+    }
+
+    /**
+     * @param timestamp       when it was detected
+     * @param tps             one-minute TPS
+     * @param averageMspt     rolling average MSPT
+     * @param peakMs          longest gap between ticks in the window
+     * @param loadedChunks    number of loaded chunks that were scanned
+     * @param totalEntities   total entity count across the scanned worlds
+     * @param topChunks       most suspicious chunks, sorted descending
+     * @param category        guessed cause (for chunk number one)
+     * @param suggestedAction hint for the admin
+     * @param scanDurationMs  how long the chunk scan itself took
+     * @param manual          whether the incident came from {@code /lagwatch report}
+     * @param sparkSummary    extra statistics from spark, or {@code null} when spark is absent
+     * @param memoryNote      what memory and the garbage collector were doing, or {@code null}
+     * @param pluginNote      which plugin was eating the tick, or {@code null} when none stood out
+     * @param chunkLoadNote   how fast chunks were coming into memory, or {@code null}
+     * @param p95Ms           95th percentile tick time, or 0 when unknown
+     * @param p99Ms           99th percentile tick time, or 0 when unknown
+     */
+    public LagEvent(Instant timestamp, double tps, double averageMspt, double peakMs, int loadedChunks,
+                    int totalEntities, List<ChunkStat> topChunks, LagCategory category, String suggestedAction,
+                    long scanDurationMs, boolean manual, String sparkSummary, String memoryNote,
+                    String pluginNote, String chunkLoadNote, double p95Ms, double p99Ms) {
+        this.p95Ms = p95Ms;
+        this.p99Ms = p99Ms;
         this.pluginNote = pluginNote;
         this.chunkLoadNote = chunkLoadNote;
         this.timestamp = timestamp;
@@ -314,5 +346,37 @@ public final class LagEvent {
     /** @return most suspicious chunk, or {@code null} when none stood out */
     public ChunkStat primaryChunk() {
         return topChunks.isEmpty() ? null : topChunks.get(0);
+    }
+
+    /** @return 95th percentile tick time in the window, or 0 when it was not measured */
+    public double p95Ms() {
+        return p95Ms;
+    }
+
+    /** @return 99th percentile tick time in the window, or 0 when it was not measured */
+    public double p99Ms() {
+        return p99Ms;
+    }
+
+    /** @return whether percentiles are available - false on a server that cannot measure them */
+    public boolean hasPercentiles() {
+        return p95Ms > 0.0D;
+    }
+
+    /**
+     * Copies this incident with the tick time percentiles attached.
+     *
+     * <p>A wither rather than two more parameters on each of the {@code of} factories: the scan
+     * takes several ticks, so the percentiles are read where the finished incident is handed on,
+     * and the analysis code that builds one has no business knowing about them.</p>
+     *
+     * @param p95 95th percentile tick time
+     * @param p99 99th percentile tick time
+     * @return a new incident; this one is left untouched
+     */
+    public LagEvent withPercentiles(double p95, double p99) {
+        return new LagEvent(timestamp, tps, averageMspt, peakMs, loadedChunks, totalEntities,
+                topChunks, category, suggestedAction, scanDurationMs, manual, sparkSummary,
+                memoryNote, pluginNote, chunkLoadNote, p95, p99);
     }
 }

@@ -125,8 +125,21 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                 "colour", healthColor(mspt <= threshold * 0.6D, mspt <= threshold).toString(),
                 "mspt", String.format(Locale.ROOT, "%.1f", mspt),
                 "threshold", String.format(Locale.ROOT, "%.0f", threshold)));
+        // The average says whether the server is generally behind; the percentiles say how bad its
+        // bad ticks get. A server averaging 20 ms with a p99 of 400 ms stutters, and only one of
+        // those two numbers shows it.
+        sender.sendMessage(msg("status.percentiles",
+                "colour", healthColor(monitor.p99Mspt() <= threshold,
+                        monitor.p99Mspt() <= threshold * 2.0D).toString(),
+                "p95", String.format(Locale.ROOT, "%.0f", monitor.p95Mspt()),
+                "p99", String.format(Locale.ROOT, "%.0f", monitor.p99Mspt()),
+                "worst", String.format(Locale.ROOT, "%.0f", monitor.worstTickMs())));
         sender.sendMessage(msg("status.peak",
                 "peak", String.format(Locale.ROOT, "%.0f", monitor.peakIntervalMs())));
+        if (!monitor.tickTimeSource().isRaw()) {
+            // Otherwise the percentiles above look like per-tick measurements when they are not.
+            sender.sendMessage(msg("status.tick-source", "source", monitor.tickTimeSource().describe()));
+        }
 
         AdaptiveThreshold adaptive = plugin.adaptiveThreshold();
         if (plugin.configManager().adaptiveSettings().enabled()) {

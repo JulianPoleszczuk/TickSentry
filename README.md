@@ -272,6 +272,7 @@ What you get:
 | --- | --- |
 | `ticksentry_tps` | ticks per second, out of 20 |
 | `ticksentry_mspt_milliseconds` | average tick time |
+| `ticksentry_mspt_p95_milliseconds` / `_p99_` | what the bad ticks reach |
 | `ticksentry_mspt_peak_milliseconds` | longest freeze in the window |
 | `ticksentry_players` | players online |
 | `ticksentry_heap_used_bytes` / `_max_bytes` | memory |
@@ -282,9 +283,12 @@ What you get:
 | `ticksentry_repeat_offender_chunks` | how many chunks keep coming back |
 | `ticksentry_plugin_handler_seconds{plugin="..."}` | event handler time, per plugin |
 
-Everything is a gauge. A Prometheus counter must never decrease, and none of these numbers can
-promise that across a restart. Only the ten most expensive plugins get their own series - every
-distinct label value costs storage, and a server with eighty plugins would quietly multiply it.
+Everything is a gauge, percentiles included. A Prometheus counter must never decrease, and none of
+these numbers can promise that across a restart; the percentiles are gauges rather than a summary
+because they are computed over a window this plugin owns, and exporting them as a summary would
+invite `quantile()` queries that an already-aggregated number cannot answer. Only the ten most
+expensive plugins get their own series - every distinct label value costs storage, and a server with
+eighty plugins would quietly multiply it.
 
 Set `metrics: false` under `dashboard` to turn the endpoint off and keep only the page.
 

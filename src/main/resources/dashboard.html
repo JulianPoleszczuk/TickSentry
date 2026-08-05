@@ -58,6 +58,7 @@
   <div class="grid">
     <div class="card"><div class="label">TPS</div><div class="value" id="tps">-</div><div class="sub">of 20</div></div>
     <div class="card"><div class="label">Tick time</div><div class="value" id="mspt">-</div><div class="sub" id="threshold"></div></div>
+    <div class="card"><div class="label">Bad ticks</div><div class="value" id="p99">-</div><div class="sub" id="p95"></div></div>
     <div class="card"><div class="label">Longest freeze</div><div class="value" id="peak">-</div><div class="sub">in sample window</div></div>
     <div class="card"><div class="label">Players</div><div class="value" id="players">-</div><div class="sub">online</div></div>
     <div class="card"><div class="label">Incidents</div><div class="value" id="inc24">-</div><div class="sub">last 24 hours</div></div>
@@ -150,6 +151,11 @@ function refreshLive() {
     $("mspt").textContent = live.mspt.toFixed(1) + " ms";
     $("mspt").className = "value" + (live.mspt > live.threshold ? " bad" : "");
     $("threshold").textContent = "threshold " + live.threshold.toFixed(0) + " ms";
+    // A healthy average with an awful p99 is a stuttering server, so this card goes red on the
+    // percentile even while the average card stays green.
+    $("p99").textContent = live.p99Ms.toFixed(0) + " ms";
+    $("p99").className = "value" + (live.p99Ms > live.threshold ? " bad" : "");
+    $("p95").textContent = "p99, p95 is " + live.p95Ms.toFixed(0) + " ms";
     $("peak").textContent = live.peakMs.toFixed(0) + " ms";
     $("players").textContent = live.players;
     $("inc24").textContent = live.incidents24h;

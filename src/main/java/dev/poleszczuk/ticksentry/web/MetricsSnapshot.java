@@ -20,11 +20,13 @@ import java.util.Map;
 public final class MetricsSnapshot {
 
     private static final MetricsSnapshot EMPTY = new MetricsSnapshot(
-            20.0D, 0.0D, 0.0D, 50.0D, 0, false, false, 0, 0L, -1L, 0L, 0L, 0, 0,
+            20.0D, 0.0D, 0.0D, 0.0D, 0.0D, 50.0D, 0, false, false, 0, 0L, -1L, 0L, 0L, 0, 0,
             Collections.emptyMap(), 0L);
 
     private final double tps;
     private final double mspt;
+    private final double p95Ms;
+    private final double p99Ms;
     private final double peakMs;
     private final double threshold;
     private final int players;
@@ -43,6 +45,8 @@ public final class MetricsSnapshot {
     /**
      * @param tps             current TPS
      * @param mspt            average tick time
+     * @param p95Ms           95th percentile tick time
+     * @param p99Ms           99th percentile tick time
      * @param peakMs          longest freeze in the sample window
      * @param threshold       alert threshold from the configuration
      * @param players         number of players online
@@ -58,13 +62,16 @@ public final class MetricsSnapshot {
      * @param pluginSeconds   seconds each plugin spent in its event handlers in the window
      * @param generatedAt     when the snapshot was taken
      */
-    public MetricsSnapshot(double tps, double mspt, double peakMs, double threshold, int players,
+    public MetricsSnapshot(double tps, double mspt, double p95Ms, double p99Ms, double peakMs,
+                           double threshold, int players,
                            boolean monitoring, boolean inIncident, int incidents24h,
                            long heapUsedBytes, long heapMaxBytes, long gcCollections, long gcTimeMs,
                            int loadedChunks, int repeatOffenders, Map<String, Double> pluginSeconds,
                            long generatedAt) {
         this.tps = tps;
         this.mspt = mspt;
+        this.p95Ms = p95Ms;
+        this.p99Ms = p99Ms;
         this.peakMs = peakMs;
         this.threshold = threshold;
         this.players = players;
@@ -103,6 +110,11 @@ public final class MetricsSnapshot {
         gauge(text, "ticksentry_up", "1 while the plugin is running and serving metrics", 1.0D);
         gauge(text, "ticksentry_tps", "Ticks per second, out of 20", tps);
         gauge(text, "ticksentry_mspt_milliseconds", "Average time one tick takes", mspt);
+        // Percentiles, not a Prometheus summary: the quantiles are computed over a window this
+        // plugin owns, and exporting them as a summary would invite quantile() queries that cannot
+        // be answered from an already-aggregated number.
+        gauge(text, "ticksentry_mspt_p95_milliseconds", "95th percentile time one tick takes", p95Ms);
+        gauge(text, "ticksentry_mspt_p99_milliseconds", "99th percentile time one tick takes", p99Ms);
         gauge(text, "ticksentry_mspt_peak_milliseconds", "Longest gap between ticks in the window", peakMs);
         gauge(text, "ticksentry_mspt_threshold_milliseconds", "Tick time above which lag is reported", threshold);
         gauge(text, "ticksentry_players", "Players online", players);

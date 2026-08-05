@@ -345,6 +345,8 @@ public final class TickSentryPlugin extends JavaPlugin {
         return new LiveSnapshot(
                 tickMonitor.tps(),
                 tickMonitor.averageMspt(),
+                tickMonitor.p95Mspt(),
+                tickMonitor.p99Mspt(),
                 tickMonitor.peakIntervalMs(),
                 tickMonitor.thresholdMs(),
                 getServer().getOnlinePlayers().size(),
@@ -380,6 +382,8 @@ public final class TickSentryPlugin extends JavaPlugin {
         return new MetricsSnapshot(
                 tickMonitor.tps(),
                 tickMonitor.averageMspt(),
+                tickMonitor.p95Mspt(),
+                tickMonitor.p99Mspt(),
                 tickMonitor.peakIntervalMs(),
                 tickMonitor.thresholdMs(),
                 getServer().getOnlinePlayers().size(),
@@ -516,7 +520,12 @@ public final class TickSentryPlugin extends JavaPlugin {
      */
     public boolean runScan(boolean manual, Consumer<LagEvent> callback) {
         return scanner.startScan(tickMonitor.tps(), tickMonitor.averageMspt(),
-                tickMonitor.peakIntervalMs(), manual, callback);
+                tickMonitor.peakIntervalMs(), manual,
+                // Percentiles are attached here rather than inside the scan: the analysis code has
+                // no business knowing about them, and a scan spread over a few ticks reads the same
+                // hundred-tick window either way.
+                event -> callback.accept(event.withPercentiles(
+                        tickMonitor.p95Mspt(), tickMonitor.p99Mspt())));
     }
 
     /**

@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MetricsSnapshotTest {
 
     private static MetricsSnapshot sample(long heapMax, Map<String, Double> plugins) {
-        return new MetricsSnapshot(19.87D, 12.5D, 48.0D, 50.0D, 12, true, false, 3,
+        return new MetricsSnapshot(19.87D, 12.5D, 35.0D, 210.0D, 48.0D, 50.0D, 12, true, false, 3,
                 1_073_741_824L, heapMax, 4L, 120L, 1200, 2, plugins, 1_754_308_800_000L);
     }
 
@@ -33,6 +33,10 @@ class MetricsSnapshotTest {
 
         assertTrue(text.contains("\nticksentry_tps 19.8700\n"));
         assertTrue(text.contains("\nticksentry_mspt_milliseconds 12.5000\n"));
+        // A healthy average alongside a p99 twenty times higher - the pair Grafana needs to show
+        // that this server stutters rather than merely runs warm.
+        assertTrue(text.contains("\nticksentry_mspt_p95_milliseconds 35\n"));
+        assertTrue(text.contains("\nticksentry_mspt_p99_milliseconds 210\n"));
         // Whole numbers stay whole, and a big byte count must not turn into 1.0737E9.
         assertTrue(text.contains("\nticksentry_players 12\n"));
         assertTrue(text.contains("\nticksentry_heap_used_bytes 1073741824\n"));

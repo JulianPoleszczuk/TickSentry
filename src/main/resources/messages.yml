@@ -66,8 +66,14 @@ status:
   tps: "&7TPS: {colour}{tps}&8 / 20"
   # {colour} {mspt} {threshold}
   mspt: "&7Tick time: {colour}{mspt} ms&8 (threshold: {threshold} ms)"
+  # The tick times your bad ticks reach. An average of 20 ms with a p99 of 400 ms is a server that
+  # stutters, and the average alone would call it healthy. {colour} {p95} {p99} {worst}
+  percentiles: "&7Bad ticks: {colour}p95 {p95} ms&7, p99 &f{p99} ms&8 (worst single tick {worst} ms)"
   # {peak}
   peak: "&7Longest freeze in window: &f{peak} ms"
+  # Shown only on a server with no per-tick measurements, so the numbers above are not mistaken
+  # for something finer than they are. {source}
+  tick-source: "&8 measured from {source}"
   # {baseline}
   adaptive-ready: "&7Threshold: &fadaptive - this server normally runs at {baseline} ms"
   # {have} {need}

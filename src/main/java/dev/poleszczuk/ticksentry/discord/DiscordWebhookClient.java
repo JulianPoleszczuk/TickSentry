@@ -252,9 +252,17 @@ public final class DiscordWebhookClient {
                         "explanation", messages.plainCategoryDescription(event.category())
                                 .toLowerCase(Locale.ROOT)));
 
-        embed.field(messages.plain("discord.field.health"), String.format(Locale.ROOT,
-                "TPS: **%.1f** / 20%nTick time: **%.0f ms** (threshold %.0f ms)%nLongest freeze: **%.0f ms**",
-                event.tps(), event.averageMspt(), threshold.getAsDouble(), event.peakMs()), true);
+        StringBuilder health = new StringBuilder(String.format(Locale.ROOT,
+                "TPS: **%.1f** / 20%nTick time: **%.0f ms** (threshold %.0f ms)",
+                event.tps(), event.averageMspt(), threshold.getAsDouble()));
+        if (event.hasPercentiles()) {
+            // The average is what tripped the alert; the percentiles are what the admin needs to
+            // tell "generally slow" apart from "stopping dead a few times a second".
+            health.append(String.format(Locale.ROOT, "%nBad ticks: **p95 %.0f ms**, p99 %.0f ms",
+                    event.p95Ms(), event.p99Ms()));
+        }
+        health.append(String.format(Locale.ROOT, "%nLongest freeze: **%.0f ms**", event.peakMs()));
+        embed.field(messages.plain("discord.field.health"), health.toString(), true);
 
         if (primary != null) {
             embed.field(messages.plain("discord.field.where"), describe(primary), true);

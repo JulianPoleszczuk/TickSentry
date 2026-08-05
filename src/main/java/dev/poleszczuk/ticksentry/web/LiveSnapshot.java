@@ -13,6 +13,8 @@ public final class LiveSnapshot {
 
     private final double tps;
     private final double mspt;
+    private final double p95Ms;
+    private final double p99Ms;
     private final double peakMs;
     private final double threshold;
     private final int players;
@@ -26,6 +28,8 @@ public final class LiveSnapshot {
     /**
      * @param tps          current TPS
      * @param mspt         average tick time
+     * @param p95Ms        95th percentile tick time
+     * @param p99Ms        99th percentile tick time
      * @param peakMs       longest freeze in the sample window
      * @param threshold    alert threshold from the configuration
      * @param players      number of players online
@@ -36,11 +40,14 @@ public final class LiveSnapshot {
      * @param sparkSummary statistics from spark, or {@code null}
      * @param generatedAt  when the snapshot was taken
      */
-    public LiveSnapshot(double tps, double mspt, double peakMs, double threshold, int players,
+    public LiveSnapshot(double tps, double mspt, double p95Ms, double p99Ms, double peakMs,
+                        double threshold, int players,
                         boolean monitoring, boolean inIncident, int incidents24h, String lastCategory,
                         String sparkSummary, long generatedAt) {
         this.tps = tps;
         this.mspt = mspt;
+        this.p95Ms = p95Ms;
+        this.p99Ms = p99Ms;
         this.peakMs = peakMs;
         this.threshold = threshold;
         this.players = players;
@@ -54,7 +61,7 @@ public final class LiveSnapshot {
 
     /** @return placeholder snapshot, used before the first real measurement exists */
     public static LiveSnapshot empty() {
-        return new LiveSnapshot(20.0D, 0.0D, 0.0D, 50.0D, 0, false, false, 0, null, null,
+        return new LiveSnapshot(20.0D, 0.0D, 0.0D, 0.0D, 0.0D, 50.0D, 0, false, false, 0, null, null,
                 System.currentTimeMillis());
     }
 
@@ -82,6 +89,8 @@ public final class LiveSnapshot {
         return "{"
                 + Json.field("tps", tps) + ","
                 + Json.field("mspt", mspt) + ","
+                + Json.field("p95Ms", p95Ms) + ","
+                + Json.field("p99Ms", p99Ms) + ","
                 + Json.field("peakMs", peakMs) + ","
                 + Json.field("threshold", threshold) + ","
                 + Json.field("players", players) + ","
