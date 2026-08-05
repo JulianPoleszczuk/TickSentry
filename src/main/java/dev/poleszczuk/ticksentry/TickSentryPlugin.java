@@ -1,5 +1,6 @@
 package dev.poleszczuk.ticksentry;
 
+import dev.poleszczuk.ticksentry.alert.AlertSinks;
 import dev.poleszczuk.ticksentry.commands.LagWatchCommand;
 import dev.poleszczuk.ticksentry.config.ConfigManager;
 import dev.poleszczuk.ticksentry.config.MessageBundle;
@@ -127,6 +128,7 @@ public final class TickSentryPlugin extends JavaPlugin {
     private AutoRemediation remediation;
     private AdaptiveThreshold adaptiveThreshold;
     private DashboardServer dashboard;
+    private AlertSinks alertSinks;
 
     /** Whether one thread may read every loaded chunk - false on Folia, see {@link FoliaSupport}. */
     private boolean worldScanAllowed = true;
@@ -174,6 +176,8 @@ public final class TickSentryPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(chunkLoadRate, this);
         }
         this.webhook = new DiscordWebhookClient(this, configManager, messages, this::effectiveThresholdMs);
+        this.alertSinks = new AlertSinks(this);
+        this.alertSinks.add(webhook);
         this.remediation = new AutoRemediation(this, scheduler, configManager::remedySettings,
                 this::reportRemediation, messages);
         this.adaptiveThreshold = new AdaptiveThreshold(configManager.adaptiveSettings(),
@@ -224,8 +228,8 @@ public final class TickSentryPlugin extends JavaPlugin {
             // Puts every wrapped listener back, so a /reload leaves the server as we found it.
             pluginProfiler.stop();
         }
-        if (webhook != null) {
-            webhook.shutdown();
+        if (alertSinks != null) {
+            alertSinks.shutdown();
         }
         if (dashboard != null) {
             dashboard.stop();
@@ -505,7 +509,7 @@ public final class TickSentryPlugin extends JavaPlugin {
     private void handleRecovery(long durationSeconds) {
         getLogger().info("Server is back to normal after " + durationSeconds + " s.");
         if (configManager.recoveryAlert()) {
-            webhook.sendRecovery(durationSeconds, tickMonitor.tps(), tickMonitor.averageMspt());
+            alertSinks.recovery(durationSeconds, tickMonitor.tps(), tickMonitor.averageMspt());
         }
     }
 
@@ -543,7 +547,7 @@ public final class TickSentryPlugin extends JavaPlugin {
             getLogger().warning("Chunk loading: " + event.chunkLoadNote());
         }
         getLogger().warning("Suggestion: " + event.suggestedAction());
-        webhook.sendLagAlert(event);
+        alertSinks.incident(event);
         announceInGame(event);
         if (worldScanAllowed) {
             // Removing entities means touching chunks, which on Folia belong to other threads.
@@ -600,7 +604,7 @@ public final class TickSentryPlugin extends JavaPlugin {
                 player.sendMessage(line);
             }
         }
-        webhook.sendRemediation(summary);
+        alertSinks.remediation(summary);
     }
 
     /** @return the automatic clean-up, which does nothing unless an admin enabled it */

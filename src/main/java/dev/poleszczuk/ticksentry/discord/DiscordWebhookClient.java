@@ -1,5 +1,6 @@
 package dev.poleszczuk.ticksentry.discord;
 
+import dev.poleszczuk.ticksentry.alert.AlertSink;
 import dev.poleszczuk.ticksentry.config.ConfigManager;
 import dev.poleszczuk.ticksentry.config.MessageBundle;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
@@ -30,7 +31,7 @@ import java.util.logging.Level;
  * on I/O. The payload itself is built synchronously from a finished {@link LagEvent}, which is
  * an immutable snapshot, so nothing touches Bukkit off the main thread.</p>
  */
-public final class DiscordWebhookClient {
+public final class DiscordWebhookClient implements AlertSink {
 
     private static final int COLOR_CRITICAL = 0xE74C3C;
     private static final int COLOR_WARNING = 0xE67E22;
@@ -155,7 +156,33 @@ public final class DiscordWebhookClient {
         return hours + " h " + (minutes % 60L) + " min";
     }
 
+    @Override
+    public void incident(LagEvent event) {
+        sendLagAlert(event);
+    }
+
+    @Override
+    public void recovery(long durationSeconds, double tps, double mspt) {
+        sendRecovery(durationSeconds, tps, mspt);
+    }
+
+    @Override
+    public void remediation(String summary) {
+        sendRemediation(summary);
+    }
+
+    @Override
+    public boolean isConfigured() {
+        return config.discordEnabled();
+    }
+
+    @Override
+    public String name() {
+        return "Discord";
+    }
+
     /** Shuts down the delivery thread, allowing a moment to finish pending work. */
+    @Override
     public void shutdown() {
         executor.shutdown();
         try {
