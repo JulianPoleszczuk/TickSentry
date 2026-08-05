@@ -10,6 +10,7 @@ import dev.poleszczuk.ticksentry.monitor.PluginProfiler;
 import dev.poleszczuk.ticksentry.monitor.PluginReport;
 import dev.poleszczuk.ticksentry.monitor.PluginTiming;
 import dev.poleszczuk.ticksentry.monitor.TickMonitor;
+import dev.poleszczuk.ticksentry.monitor.WorldStat;
 import dev.poleszczuk.ticksentry.remedy.RemedySettings;
 import dev.poleszczuk.ticksentry.storage.RepeatOffender;
 import dev.poleszczuk.ticksentry.storage.StoredIncident;
@@ -48,8 +49,8 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
      */
     private static final String TELEPORT_PERMISSION = "ticksentry.teleport";
 
-    private static final List<String> SUBCOMMANDS =
-            List.of("status", "report", "plugins", "history", "offenders", "stats", "tp", "reload");
+    private static final List<String> SUBCOMMANDS = List.of("status", "report", "plugins", "worlds",
+            "history", "offenders", "stats", "tp", "reload");
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
     private static final DateTimeFormatter DATE_TIME =
             DateTimeFormatter.ofPattern("dd.MM HH:mm").withZone(ZoneId.systemDefault());
@@ -113,6 +114,9 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                 break;
             case "stats":
                 showStats(sender, parseDays(args));
+                break;
+            case "worlds":
+                showWorlds(sender);
                 break;
             case "tp":
                 teleport(sender, label, args);
@@ -340,6 +344,39 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                     tasks.stream().map(entry -> entry.getKey() + " " + entry.getValue())
                             .collect(Collectors.joining(", "))));
         }
+    }
+
+    /**
+     * Prints what each world is carrying.
+     *
+     * <p>Ranked by entities per chunk rather than by total, because sorting by total would name the
+     * overworld every time - that is where the players are. Density is what tells a big world apart
+     * from a crowded one.</p>
+     */
+    private void showWorlds(CommandSender sender) {
+        header(sender, msg("command.section.worlds"));
+        List<WorldStat> worlds = plugin.worldStats();
+        if (worlds.isEmpty()) {
+            sender.sendMessage(msg(plugin.worldScanAllowed()
+                    ? "worlds.empty" : "worlds.unavailable"));
+            return;
+        }
+
+        int total = WorldStat.totalEntities(worlds);
+        int index = 1;
+        for (WorldStat world : WorldStat.ranked(worlds)) {
+            sender.sendMessage(msg("worlds.entry",
+                    "index", String.valueOf(index++),
+                    "world", world.name(),
+                    "chunks", String.valueOf(world.loadedChunks()),
+                    "entities", String.valueOf(world.entities()),
+                    "density", String.format(Locale.ROOT, "%.1f", world.entitiesPerChunk()),
+                    "share", String.format(Locale.ROOT, "%.0f", world.share(total) * 100.0D),
+                    "players", String.valueOf(world.players())));
+        }
+        sender.sendMessage(msg("worlds.total",
+                "entities", String.valueOf(total),
+                "worlds", String.valueOf(worlds.size())));
     }
 
     /** Prints recent incidents; with SQLite storage this includes ones from before a restart. */

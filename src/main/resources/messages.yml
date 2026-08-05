@@ -46,7 +46,7 @@ discord:
 # numbers (green when healthy, red when not) - keep them where the value starts.
 command:
   no-permission: "&cYou do not have permission."
-  usage: "&cUsage: /{label} <status|report|plugins|history|offenders|stats|reload>"
+  usage: "&cUsage: /{label} <status|report|plugins|worlds|history|offenders|stats|reload>"
   header: "&8--- &bTickSentry &f{section} &8---"
   # The button appended to every line that has coordinates. Shown only to players holding
   # ticksentry.teleport - console and everyone else get the plain line.
@@ -57,6 +57,7 @@ command:
     status: "Status"
     report: "Report"
     plugins: "Plugins"
+    worlds: "Worlds"
     history: "History"
     # {days}
     offenders: "Repeat offenders ({days} days)"
@@ -146,6 +147,15 @@ plugins:
   all-clear: "&aNo plugin stands out - none of them is holding the tick."
   # {tasks}
   pending-tasks: "&7Pending scheduler tasks: &8{tasks}"
+
+worlds:
+  empty: "&7No worlds are loaded."
+  unavailable: "&eThis server does not allow one thread to read every world, so there is nothing to count here."
+  # Ordered by entities per chunk, not by total: density is what tells a big world apart from a
+  # crowded one. {index} {world} {chunks} {entities} {density} {share} {players}
+  entry: "&8 {index}. &f{world}&7 - {entities} entities in {chunks} chunks &8({density}/chunk, {share}% of all, {players} players)"
+  # {entities} {worlds}
+  total: "&7Total: &f{entities} entities&7 across &f{worlds}&7 worlds."
 
 history:
   empty: "&aNo incidents recorded yet."

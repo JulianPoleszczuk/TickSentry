@@ -1,9 +1,14 @@
 package dev.poleszczuk.ticksentry.web;
 
+import dev.poleszczuk.ticksentry.monitor.WorldStat;
+
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.ToIntFunction;
 
 /**
  * Server state rendered in the Prometheus text exposition format.
@@ -21,7 +26,7 @@ public final class MetricsSnapshot {
 
     private static final MetricsSnapshot EMPTY = new MetricsSnapshot(
             20.0D, 0.0D, 0.0D, 0.0D, 0.0D, 50.0D, 0, false, false, 0, 0L, -1L, 0L, 0L, 0, 0,
-            Collections.emptyMap(), 0L);
+            Collections.emptyMap(), Collections.emptyList(), 0L);
 
     private final double tps;
     private final double mspt;
@@ -40,6 +45,7 @@ public final class MetricsSnapshot {
     private final int loadedChunks;
     private final int repeatOffenders;
     private final Map<String, Double> pluginSeconds;
+    private final List<WorldStat> worlds;
     private final long generatedAt;
 
     /**
@@ -60,6 +66,7 @@ public final class MetricsSnapshot {
      * @param loadedChunks    chunks loaded across all worlds
      * @param repeatOffenders how many chunks have been behind more than one incident
      * @param pluginSeconds   seconds each plugin spent in its event handlers in the window
+     * @param worlds          what each world is carrying, empty where that cannot be read
      * @param generatedAt     when the snapshot was taken
      */
     public MetricsSnapshot(double tps, double mspt, double p95Ms, double p99Ms, double peakMs,
@@ -67,7 +74,8 @@ public final class MetricsSnapshot {
                            boolean monitoring, boolean inIncident, int incidents24h,
                            long heapUsedBytes, long heapMaxBytes, long gcCollections, long gcTimeMs,
                            int loadedChunks, int repeatOffenders, Map<String, Double> pluginSeconds,
-                           long generatedAt) {
+                           List<WorldStat> worlds, long generatedAt) {
+        this.worlds = worlds == null ? Collections.emptyList() : new ArrayList<>(worlds);
         this.tps = tps;
         this.mspt = mspt;
         this.p95Ms = p95Ms;
@@ -138,6 +146,18 @@ public final class MetricsSnapshot {
         gauge(text, "ticksentry_gc_milliseconds",
                 "Milliseconds spent collecting garbage since the previous reading", gcTimeMs);
 
+        if (!worlds.isEmpty()) {
+            // One series per world rather than a single total. A server with five worlds wants to
+            // know which one is filling up, and the total cannot answer that. The count is bounded
+            // by how many worlds exist, so unlike plugin names there is nothing to cap.
+            labelled(text, "ticksentry_world_loaded_chunks", "Chunks loaded in one world",
+                    worlds, WorldStat::loadedChunks);
+            labelled(text, "ticksentry_world_entities", "Entities in one world",
+                    worlds, WorldStat::entities);
+            labelled(text, "ticksentry_world_players", "Players in one world",
+                    worlds, WorldStat::players);
+        }
+
         if (!pluginSeconds.isEmpty()) {
             text.append("# HELP ticksentry_plugin_handler_seconds ")
                     .append("Seconds a plugin spent in its synchronous event handlers in the profiler window\n")
@@ -152,6 +172,17 @@ public final class MetricsSnapshot {
         gauge(text, "ticksentry_snapshot_timestamp_seconds",
                 "When these numbers were taken", generatedAt / 1000.0D);
         return text.toString();
+    }
+
+    /** Writes one gauge with a {@code world="..."} label per world. */
+    private static void labelled(StringBuilder text, String name, String help,
+                                 List<WorldStat> worlds, ToIntFunction<WorldStat> reading) {
+        text.append("# HELP ").append(name).append(' ').append(help).append('\n')
+                .append("# TYPE ").append(name).append(" gauge\n");
+        for (WorldStat world : worlds) {
+            text.append(name).append("{world=\"").append(escapeLabel(world.name())).append("\"} ")
+                    .append(number(reading.applyAsInt(world))).append('\n');
+        }
     }
 
     private static void gauge(StringBuilder text, String name, String help, double value) {

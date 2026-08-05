@@ -19,6 +19,7 @@ import dev.poleszczuk.ticksentry.monitor.PluginTiming;
 import dev.poleszczuk.ticksentry.monitor.RegionLookup;
 import dev.poleszczuk.ticksentry.monitor.SparkBridge;
 import dev.poleszczuk.ticksentry.monitor.TickMonitor;
+import dev.poleszczuk.ticksentry.monitor.WorldStat;
 import dev.poleszczuk.ticksentry.placeholders.TickSentryExpansion;
 import dev.poleszczuk.ticksentry.remedy.AutoRemediation;
 import dev.poleszczuk.ticksentry.storage.AlertStore;
@@ -41,7 +42,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -388,13 +391,14 @@ public final class TickSentryPlugin extends JavaPlugin {
         MemoryProbe.MemorySample memory = memoryWatcher.sample();
 
         // Reading a world's loaded chunks is reading region-owned state, so it is off limits
-        // wherever the chunk scan is. Exported as -1, which Prometheus treats as a value: a
+        // wherever the chunk scan is. The total is exported as -1 there and the renderer omits it: a
         // gauge silently reporting 0 chunks would look like an empty server.
+        List<WorldStat> worlds = worldStats();
         int loadedChunks = -1;
         if (worldScanAllowed) {
             loadedChunks = 0;
-            for (World world : getServer().getWorlds()) {
-                loadedChunks += world.getLoadedChunks().length;
+            for (WorldStat world : worlds) {
+                loadedChunks += world.loadedChunks();
             }
         }
 
@@ -422,6 +426,7 @@ public final class TickSentryPlugin extends JavaPlugin {
                 loadedChunks,
                 offenderIndex.ranked().size(),
                 pluginSeconds,
+                worlds,
                 System.currentTimeMillis());
     }
 
@@ -473,6 +478,28 @@ public final class TickSentryPlugin extends JavaPlugin {
             // decision rather than an accident.
             remediation.consider(event);
         }
+    }
+
+    /**
+     * Counts what each world is carrying. Main thread only.
+     *
+     * <p>Every other reading in the plugin is server-wide, which stops being useful the moment a
+     * server has more than one world: "4,000 entities" cannot distinguish an evenly loaded server
+     * from one where somebody's farm is holding three quarters of them.</p>
+     *
+     * @return one entry per world, or an empty list where reading worlds is not allowed
+     */
+    public List<WorldStat> worldStats() {
+        if (!worldScanAllowed) {
+            // Same reason as the chunk scan: these are region-owned reads.
+            return List.of();
+        }
+        List<WorldStat> stats = new ArrayList<>();
+        for (World world : getServer().getWorlds()) {
+            stats.add(new WorldStat(world.getName(), world.getLoadedChunks().length,
+                    world.getEntities().size(), world.getPlayers().size()));
+        }
+        return stats;
     }
 
     /**

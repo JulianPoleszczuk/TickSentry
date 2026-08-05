@@ -87,6 +87,7 @@ handy if you want moderators warned without giving them the commands.
 | `/lagwatch report` | checks the server immediately and lists the 5 worst chunks |
 | `/lagwatch report discord` | same, but also sends it to Discord (good for testing your webhook) |
 | `/lagwatch plugins` | shows which plugins spent the most time in their event handlers |
+| `/lagwatch worlds` | shows what each world is carrying, densest first |
 | `/lagwatch history` | shows past incidents, even from before a restart |
 | `/lagwatch offenders` | shows the chunks that keep causing incidents, not just the last one |
 | `/lagwatch stats` | shows a summary: how many incidents, what caused them, at what time of day |
@@ -100,6 +101,23 @@ do not give one.
 
 `/lagwatch report discord` also starts the alert cooldown, so an automatic alert cannot post the
 same incident to the channel moments after you sent it there by hand.
+
+### Which world
+
+Everything else the plugin reports is server-wide, and "4,000 entities" cannot tell you whether that
+is spread evenly or all sitting in one nether hub. `/lagwatch worlds` breaks it down:
+
+```
+ 1. world_nether - 2250 entities in 150 chunks (15.0/chunk, 43% of all, 0 players)
+ 2. world - 3000 entities in 2000 chunks (1.5/chunk, 57% of all, 12 players)
+```
+
+Ordered by entities **per chunk**, not by total. Sorting by total would name the overworld every
+time, because that is where the players are; density is what tells a big world apart from a crowded
+one - and the nether above is the one somebody built a farm in, despite holding fewer entities.
+
+The same numbers are exported per world to Prometheus, so a Grafana panel can show which world is
+filling up rather than just that the server is.
 
 ### Clicking through to the problem
 
@@ -327,6 +345,9 @@ What you get:
 | `ticksentry_incidents_24h` | incidents in the last day |
 | `ticksentry_incident_active` | 1 while the server is lagging right now |
 | `ticksentry_repeat_offender_chunks` | how many chunks keep coming back |
+| `ticksentry_world_entities{world="..."}` | entities, per world |
+| `ticksentry_world_loaded_chunks{world="..."}` | loaded chunks, per world |
+| `ticksentry_world_players{world="..."}` | players, per world |
 | `ticksentry_plugin_handler_seconds{plugin="..."}` | event handler time, per plugin |
 
 Everything is a gauge, percentiles included. A Prometheus counter must never decrease, and none of
@@ -603,7 +624,7 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 243 of them, and none needs a running server.
+Run the tests with `./gradlew test`. There are 254 of them, and none needs a running server.
 
 Most cover the pure decision-making. Three files cover the parts that have to touch Bukkit, because
 those are the ones that can damage somebody else's server - or, in the monitor's case, quietly fail

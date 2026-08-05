@@ -2,7 +2,10 @@ package dev.poleszczuk.ticksentry.web;
 
 import org.junit.jupiter.api.Test;
 
+import dev.poleszczuk.ticksentry.monitor.WorldStat;
+
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -11,9 +14,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MetricsSnapshotTest {
 
+    private static final List<WorldStat> WORLDS = List.of(
+            new WorldStat("world", 1000, 2400, 12),
+            new WorldStat("world_nether", 200, 600, 0));
+
     private static MetricsSnapshot sample(long heapMax, Map<String, Double> plugins) {
+        return sample(heapMax, plugins, WORLDS);
+    }
+
+    private static MetricsSnapshot sample(long heapMax, Map<String, Double> plugins,
+                                          List<WorldStat> worlds) {
         return new MetricsSnapshot(19.87D, 12.5D, 35.0D, 210.0D, 48.0D, 50.0D, 12, true, false, 3,
-                1_073_741_824L, heapMax, 4L, 120L, 1200, 2, plugins, 1_754_308_800_000L);
+                1_073_741_824L, heapMax, 4L, 120L, 1200, 2, plugins, worlds, 1_754_308_800_000L);
     }
 
     @Test
@@ -58,12 +70,33 @@ class MetricsSnapshotTest {
         // server and quietly break any "chunks per player" query.
         MetricsSnapshot uncounted = new MetricsSnapshot(19.87D, 12.5D, 35.0D, 210.0D, 48.0D, 50.0D,
                 12, true, false, 3, 1_073_741_824L, 4_294_967_296L, 4L, 120L, -1, 2, Map.of(),
-                1_754_308_800_000L);
+                List.of(), 1_754_308_800_000L);
 
         String text = uncounted.render();
 
         assertFalse(text.contains("ticksentry_loaded_chunks"));
+        assertFalse(text.contains("ticksentry_world_"), "and no per-world series either");
         assertTrue(text.contains("ticksentry_players"), "everything else is still exported");
+    }
+
+    @Test
+    void eachWorldBecomesItsOwnLabelledSeries() {
+        // "4,000 entities" cannot answer which of five worlds is filling up. These can.
+        String text = sample(4_294_967_296L, Map.of()).render();
+
+        assertTrue(text.contains("ticksentry_world_entities{world=\"world\"} 2400"));
+        assertTrue(text.contains("ticksentry_world_entities{world=\"world_nether\"} 600"));
+        assertTrue(text.contains("ticksentry_world_loaded_chunks{world=\"world_nether\"} 200"));
+        assertTrue(text.contains("ticksentry_world_players{world=\"world\"} 12"));
+        assertEquals(1, countOccurrences(text, "# TYPE ticksentry_world_entities gauge"));
+    }
+
+    @Test
+    void aWorldNamedWithAQuoteCannotBreakTheOutput() {
+        String text = sample(4_294_967_296L, Map.of(),
+                List.of(new WorldStat("odd\"world", 1, 2, 0))).render();
+
+        assertTrue(text.contains("ticksentry_world_entities{world=\"odd\\\"world\"} 2"));
     }
 
     @Test
