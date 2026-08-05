@@ -1,11 +1,12 @@
 package dev.poleszczuk.ticksentry.monitor;
 
-import dev.poleszczuk.ticksentry.config.ConfigManager;
+import dev.poleszczuk.ticksentry.config.MonitorSettings;
 import org.bukkit.Server;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.function.LongConsumer;
+import java.util.function.LongSupplier;
 
 /**
  * Measures server health every tick and reports sustained overload.
@@ -22,11 +23,21 @@ public final class TickMonitor implements Runnable {
     private static final double TARGET_TICK_MS = 50.0D;
 
     private final Plugin plugin;
-    private final ConfigManager config;
+    private final MonitorSettings config;
     private final AdaptiveThreshold adaptive;
     private final Server server;
     private final Runnable onSustainedLag;
     private final LongConsumer onRecovered;
+
+    /**
+     * Source of "now" in milliseconds.
+     *
+     * <p>Every decision this class makes is about elapsed time - has the breach lasted long
+     * enough, has the cooldown expired, has the server been calm long enough to call the incident
+     * over. Reading the clock through a supplier is what lets a test walk time forward instead of
+     * sleeping through it.</p>
+     */
+    private final LongSupplier clock;
 
     private double[] msptSamples;
     private double[] intervalSamples;
@@ -49,14 +60,28 @@ public final class TickMonitor implements Runnable {
      * @param onSustainedLag action run on the main thread once sustained lag is detected
      * @param onRecovered    action run once the server recovers, with the incident length in seconds
      */
-    public TickMonitor(Plugin plugin, ConfigManager config, AdaptiveThreshold adaptive,
+    public TickMonitor(Plugin plugin, MonitorSettings config, AdaptiveThreshold adaptive,
                        Runnable onSustainedLag, LongConsumer onRecovered) {
+        this(plugin, config, adaptive, onSustainedLag, onRecovered, System::currentTimeMillis);
+    }
+
+    /**
+     * @param plugin         plugin instance (used for the scheduler)
+     * @param config         source of thresholds and time windows
+     * @param adaptive       threshold that learns this server's normal tick time
+     * @param onSustainedLag action run on the main thread once sustained lag is detected
+     * @param onRecovered    action run once the server recovers, with the incident length in seconds
+     * @param clock          source of the current time in milliseconds
+     */
+    TickMonitor(Plugin plugin, MonitorSettings config, AdaptiveThreshold adaptive,
+                Runnable onSustainedLag, LongConsumer onRecovered, LongSupplier clock) {
         this.plugin = plugin;
         this.config = config;
         this.adaptive = adaptive;
         this.server = plugin.getServer();
         this.onSustainedLag = onSustainedLag;
         this.onRecovered = onRecovered;
+        this.clock = clock;
         resizeWindow();
     }
 
@@ -116,7 +141,7 @@ public final class TickMonitor implements Runnable {
 
     /** Checks whether the threshold has been exceeded long enough and fires an alert if so. */
     private void evaluate() {
-        long nowMillis = System.currentTimeMillis();
+        long nowMillis = clock.getAsLong();
         if (averageMspt() <= thresholdMs()) {
             breachStartMillis = -1L;
             checkRecovery(nowMillis);
@@ -227,19 +252,19 @@ public final class TickMonitor implements Runnable {
 
     /** @return how long (in seconds) the MSPT threshold has been continuously exceeded; 0 when healthy */
     public long currentBreachSeconds() {
-        return breachStartMillis < 0L ? 0L : (System.currentTimeMillis() - breachStartMillis) / 1000L;
+        return breachStartMillis < 0L ? 0L : (clock.getAsLong() - breachStartMillis) / 1000L;
     }
 
     /** @return seconds left of the alert cooldown; 0 when an alert can fire immediately */
     public long alertCooldownRemainingSeconds() {
-        long elapsed = System.currentTimeMillis() - lastAlertMillis;
+        long elapsed = clock.getAsLong() - lastAlertMillis;
         long cooldown = config.scanCooldownSeconds() * 1000L;
         return elapsed >= cooldown ? 0L : (cooldown - elapsed) / 1000L;
     }
 
     /** Records that an alert has just been sent - resets the cooldown (used for manual alerts). */
     public void markAlertSent() {
-        lastAlertMillis = System.currentTimeMillis();
+        lastAlertMillis = clock.getAsLong();
     }
 
     private void resizeWindow() {

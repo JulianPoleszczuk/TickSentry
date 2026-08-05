@@ -527,20 +527,24 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 196 of them, and none needs a running server.
+Run the tests with `./gradlew test`. There are 207 of them, and none needs a running server.
 
-Most cover the pure decision-making. Two files cover the parts that have to touch Bukkit, because
-those are the ones that can damage somebody else's server:
+Most cover the pure decision-making. Three files cover the parts that have to touch Bukkit, because
+those are the ones that can damage somebody else's server - or, in the monitor's case, quietly fail
+to notice the thing the whole plugin exists to notice:
 
 - `PluginProfilerTest` swaps listeners on a real `HandlerList` and checks that priority, listener
   and the ignore-cancelled flag survive, that the delegate still receives the event, and that
   uninstalling puts the original object back.
 - `RemedySafetyTest` checks every rule that decides what the automatic clean-up refuses to
   delete - players, named mobs, tamed pets, leashed animals, anything riding or being ridden.
+- `TickMonitorTest` walks the detection state machine: a breach that ends a second early, an alert
+  held back by the cooldown, a breather too short to count as recovery. The monitor reads the clock
+  through a supplier, so the test cranks time forward by hand instead of sleeping.
 
-Neither uses MockBukkit. `HandlerList` and `RegisteredListener` are ordinary Java objects, and
-Bukkit entities are interfaces, so a proxy is enough - and unlike a mock server it cannot quietly
-answer something the real API would not.
+None uses MockBukkit. `HandlerList` and `RegisteredListener` are ordinary Java objects, and both
+Bukkit entities and `Server` are interfaces, so a proxy is enough - and unlike a mock server it
+cannot quietly answer something the real API would not.
 
 Every push runs the same build on GitHub Actions, which also checks that the jar is still Java 11
 bytecode - so nobody can break 1.16 support by accident.

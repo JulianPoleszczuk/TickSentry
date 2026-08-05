@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
  * <p>Fields are {@code volatile} because they are read both by the main server thread
  * (monitor, commands) and by the webhook delivery thread.</p>
  */
-public final class ConfigManager {
+public final class ConfigManager implements MonitorSettings {
 
     /** Where a complete, commented copy of the defaults is put when the live file is behind. */
     public static final String REFERENCE_FILE = "config-latest.yml";
@@ -263,21 +263,25 @@ public final class ConfigManager {
     }
 
     /** @return MSPT threshold in milliseconds above which the server counts as overloaded */
+    @Override
     public double msptThresholdMs() {
         return msptThresholdMs;
     }
 
     /** @return seconds of uninterrupted breach required before an alert fires */
+    @Override
     public int sustainedSeconds() {
         return sustainedSeconds;
     }
 
     /** @return minimum gap between alerts, in seconds */
+    @Override
     public int scanCooldownSeconds() {
         return scanCooldownSeconds;
     }
 
     /** @return size of the rolling MSPT average window, in ticks */
+    @Override
     public int rollingAverageTicks() {
         return rollingAverageTicks;
     }
@@ -318,6 +322,7 @@ public final class ConfigManager {
     }
 
     /** @return how many seconds below the threshold end an incident */
+    @Override
     public int recoverySeconds() {
         return recoverySeconds;
     }
