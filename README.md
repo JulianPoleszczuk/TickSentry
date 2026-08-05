@@ -516,6 +516,34 @@ time those from the outside, so that part is a count, not a measurement.
 Turn the whole thing off with `profiler.enabled: false` if you would rather TickSentry touched
 nothing but its own listeners.
 
+### What changed since last week
+
+A profiler tells you what is expensive **right now**. It has no memory, so it cannot tell an expensive
+plugin apart from a plugin that has *become* expensive - and the second one is the actionable case,
+because something changed and the change is usually an update.
+
+TickSentry writes down what each plugin costs every ten minutes, so it can answer that:
+
+```
+Costing more than usual:
+ - Essentials now takes 3.2x the tick time it usually does (2.6% of the window,
+   against 0.8% across 14 earlier readings at a similar player count).
+```
+
+It shows up in `/lagwatch plugins` and in the console at the moment of an incident.
+
+The phrase "at a similar player count" is doing real work. Handler time scales with events and events
+scale with players, so a reading taken at forty players will always look worse than the same plugin at
+five. Only comparable readings are compared, and with fewer than eight of them it says nothing at all -
+a "3x increase" over two quiet samples is noise, and a detector that cries wolf gets turned off.
+
+It also stays quiet about a plugin going from 0.01% to 0.05% of a tick. That has quintupled and still
+costs nothing.
+
+The history lives in the same database as the incidents and is deleted on the same `keep-days`
+schedule. With `storage.enabled: false` it lives in memory and starts over on each restart, which means
+it needs a few hours of uptime before it can say anything.
+
 ## Letting it clean up (off by default)
 
 Everything above only looks. If you want TickSentry to act, it can sweep dropped items and thin
@@ -624,7 +652,7 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 254 of them, and none needs a running server.
+Run the tests with `./gradlew test`. There are 267 of them, and none needs a running server.
 
 Most cover the pure decision-making. Three files cover the parts that have to touch Bukkit, because
 those are the ones that can damage somebody else's server - or, in the monitor's case, quietly fail
