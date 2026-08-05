@@ -262,6 +262,10 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
         if (alsoDiscord) {
             if (plugin.configManager().discordEnabled()) {
                 plugin.webhook().sendLagAlert(event);
+                // The channel has just been told. Without this the automatic alert could fire
+                // seconds later and post the same incident again, which is exactly what the
+                // cooldown exists to prevent - it was simply never told about manual alerts.
+                plugin.tickMonitor().markAlertSent();
                 sender.sendMessage(msg("report.sent-to-discord"));
             } else {
                 sender.sendMessage(msg("report.discord-unconfigured"));

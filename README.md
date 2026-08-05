@@ -87,6 +87,9 @@ You can type `/ts` instead of `/lagwatch`.
 `/lagwatch stats` takes a number of days, for example `/lagwatch stats 30`. It uses 7 days if you
 do not give one.
 
+`/lagwatch report discord` also starts the alert cooldown, so an automatic alert cannot post the
+same incident to the channel moments after you sent it there by hand.
+
 ## Settings
 
 The file is `plugins/TickSentry/config.yml`. After changing it, type `/lagwatch reload`.
