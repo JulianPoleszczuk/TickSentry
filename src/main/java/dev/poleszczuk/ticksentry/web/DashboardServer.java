@@ -36,6 +36,28 @@ public final class DashboardServer {
     /** Threads serving HTTP requests - the panel has a handful of users at most. */
     private static final int HTTP_THREADS = 2;
 
+    /**
+     * What the page is allowed to load and talk to.
+     *
+     * <p>Everything is denied by default and only {@code connect-src 'self'} is opened, which is
+     * what stops a token from being posted anywhere else. That is the part worth having: the page
+     * carries an access token in its address bar, and a policy that forbids reaching any other host
+     * means a mistake in the page cannot become a leak.</p>
+     *
+     * <p>The style and script blocks are inline, hence {@code 'unsafe-inline'}. Hashing them would
+     * be stronger, but a hash that does not match the browser's byte-for-byte leaves an admin
+     * staring at a blank panel, and that trade is not worth making for a single-origin page whose
+     * dynamic content is written through {@code textContent} rather than {@code innerHTML}.</p>
+     */
+    private static final String CONTENT_SECURITY_POLICY =
+            "default-src 'none'; "
+            + "script-src 'unsafe-inline'; "
+            + "style-src 'unsafe-inline'; "
+            + "connect-src 'self'; "
+            + "base-uri 'none'; "
+            + "form-action 'none'; "
+            + "frame-ancestors 'none'";
+
     private final Plugin plugin;
     private final String token;
     private final String page;
@@ -206,6 +228,8 @@ public final class DashboardServer {
         // The panel is local and is not meant to be embedded or fetched from other pages.
         headers.set("X-Frame-Options", "DENY");
         headers.set("X-Content-Type-Options", "nosniff");
+        headers.set("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+        headers.set("Referrer-Policy", "no-referrer");
         exchange.sendResponseHeaders(status, bytes.length);
         try (var out = exchange.getResponseBody()) {
             out.write(bytes);

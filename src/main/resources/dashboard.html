@@ -166,21 +166,42 @@ function refreshLive() {
   }).catch(e => showError("Cannot reach the server (" + e.message + "). Check that the token in the address is correct."));
 }
 
+// Rows are built out of DOM nodes and textContent rather than concatenated into innerHTML.
+// World names are chosen on the server and land in this table verbatim; a world named
+// <img src=x onerror=...> would otherwise run its own script inside the panel.
+function cell(text, className) {
+  const td = document.createElement("td");
+  td.textContent = text;
+  if (className) td.className = className;
+  return td;
+}
+
+function emptyRow(message) {
+  const row = document.createElement("tr");
+  const td = cell(message, "empty");
+  td.colSpan = 4;
+  row.appendChild(td);
+  return row;
+}
+
 function refreshIncidents() {
   return api("/api/incidents").then(list => {
     const body = $("incidents");
+    body.textContent = "";
     if (!list.length) {
-      body.innerHTML = '<tr><td colspan="4" class="empty">No incidents recorded yet.</td></tr>';
+      body.appendChild(emptyRow("No incidents recorded yet."));
       return;
     }
-    body.innerHTML = list.map(i => {
+    list.forEach(i => {
       const when = new Date(i.at).toLocaleString(undefined, { day: "2-digit", month: "2-digit",
         hour: "2-digit", minute: "2-digit" });
-      const where = i.world ? i.world + " @ " + i.x + ", " + i.z : "-";
-      const manual = i.manual ? " (manual)" : "";
-      return "<tr><td class='num'>" + when + manual + "</td><td class='num'>" + i.mspt.toFixed(0)
-        + " ms</td><td>" + i.category + "</td><td>" + where + "</td></tr>";
-    }).join("");
+      const row = document.createElement("tr");
+      row.appendChild(cell(when + (i.manual ? " (manual)" : ""), "num"));
+      row.appendChild(cell(i.mspt.toFixed(0) + " ms", "num"));
+      row.appendChild(cell(i.category));
+      row.appendChild(cell(i.world ? i.world + " @ " + i.x + ", " + i.z : "-"));
+      body.appendChild(row);
+    });
   }).catch(() => {});
 }
 
