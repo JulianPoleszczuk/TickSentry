@@ -114,18 +114,21 @@ public final class TickSentryPlugin extends JavaPlugin {
     private AdaptiveThreshold adaptiveThreshold;
     private DashboardServer dashboard;
 
+    /** Whether one thread may read every loaded chunk - false on Folia, see {@link FoliaSupport}. */
+    private boolean worldScanAllowed = true;
+
     private volatile int incidentsLast24h;
     private volatile LagCategory lastCategory;
     private volatile OffenderIndex offenderIndex = OffenderIndex.empty();
 
     @Override
     public void onEnable() {
-        if (FoliaSupport.isFolia()) {
-            // Bail out before touching the scheduler - on Folia the very first runTaskTimer
-            // throws, and an admin deserves a sentence rather than a stack trace.
-            getLogger().severe(FoliaSupport.explanation());
-            getServer().getPluginManager().disablePlugin(this);
-            return;
+        // The chunk scan needs one thread allowed to read the whole world, which Folia does not
+        // have. Everything else here does not, so the plugin runs without it rather than shutting
+        // down and leaving a Folia server with no monitoring at all.
+        this.worldScanAllowed = !FoliaSupport.isFolia();
+        if (!worldScanAllowed) {
+            getLogger().warning(FoliaSupport.limitedModeExplanation());
         }
         saveDefaultConfig();
         this.scheduler = Scheduler.forPlugin(this);
@@ -142,8 +145,12 @@ public final class TickSentryPlugin extends JavaPlugin {
         this.scanner = new ChunkHotspotScanner(this, scheduler, configManager, sparkBridge, memoryWatcher,
                 pluginProfiler, new ChunkAttribution(this, chunkVisitors, regionLookup, this::offenderIndex),
                 chunkLoadRate, messages);
-        getServer().getPluginManager().registerEvents(chunkVisitors, this);
-        getServer().getPluginManager().registerEvents(chunkLoadRate, this);
+        if (worldScanAllowed) {
+            // Both only feed the chunk scan - who was last seen where, and how fast chunks are
+            // arriving. With the scan off they would be counting events nothing ever reads.
+            getServer().getPluginManager().registerEvents(chunkVisitors, this);
+            getServer().getPluginManager().registerEvents(chunkLoadRate, this);
+        }
         this.webhook = new DiscordWebhookClient(this, configManager, messages, this::effectiveThresholdMs);
         this.remediation = new AutoRemediation(this, scheduler, configManager::remedySettings,
                 this::reportRemediation, messages);
@@ -169,6 +176,14 @@ public final class TickSentryPlugin extends JavaPlugin {
         scheduler.runTimer(() -> alertStore.prune(configManager.storageKeepDays()), PRUNE_TICKS, PRUNE_TICKS);
         // First read after a second, so the panel and placeholders do not show zero for a whole minute.
         scheduler.runTimer(this::refreshCounters, 20L, COUNTER_REFRESH_TICKS);
+
+        // Checked one tick in, by which point the monitor has tried to read the server once. Asking
+        // before that would only ever get the optimistic answer.
+        scheduler.runLater(() -> {
+            if (!tickMonitor.hasReadings()) {
+                getLogger().warning(FoliaSupport.noReadingsExplanation());
+            }
+        }, 2L);
 
         getLogger().info("TickSentry active - threshold " + configManager.msptThresholdMs()
                 + " ms for " + configManager.sustainedSeconds() + " s. History: " + alertStore.describe() + ".");
@@ -260,6 +275,9 @@ public final class TickSentryPlugin extends JavaPlugin {
         }
         BStatsReporter reporter = new BStatsReporter(this, scheduler);
         reporter.chart("minecraft_version", getServer().getBukkitVersion().split("-")[0]);
+        // Answers the question that decides whether Folia is worth more work than this: does
+        // anybody actually run it.
+        reporter.chart("server_flavour", worldScanAllowed ? "paper-or-spigot" : "folia");
         reporter.chart("discord_configured", String.valueOf(configManager.discordEnabled()));
         reporter.chart("profiler_enabled", String.valueOf(configManager.profilerEnabled()));
         reporter.chart("dashboard_enabled", String.valueOf(configManager.dashboardEnabled()));
@@ -443,7 +461,21 @@ public final class TickSentryPlugin extends JavaPlugin {
         getLogger().warning("Suggestion: " + event.suggestedAction());
         webhook.sendLagAlert(event);
         announceInGame(event);
-        remediation.consider(event);
+        if (worldScanAllowed) {
+            // Removing entities means touching chunks, which on Folia belong to other threads.
+            // A chunkless incident would give it nothing to act on anyway; this makes that a
+            // decision rather than an accident.
+            remediation.consider(event);
+        }
+    }
+
+    /**
+     * @return whether the chunk scan is available on this server
+     *
+     * <p>False on Folia, where alerts can name a plugin or memory but never a chunk.</p>
+     */
+    public boolean worldScanAllowed() {
+        return worldScanAllowed;
     }
 
     /**
@@ -520,6 +552,14 @@ public final class TickSentryPlugin extends JavaPlugin {
      * @return {@code false} if another scan is already running and this request was skipped
      */
     public boolean runScan(boolean manual, Consumer<LagEvent> callback) {
+        if (!worldScanAllowed) {
+            // No chunk findings, but memory, the garbage collector and per-plugin handler timings
+            // are all still measured - so a report here can name a plugin, just never a farm.
+            callback.accept(scanner.reportWithoutChunks(tickMonitor.tps(), tickMonitor.averageMspt(),
+                            tickMonitor.peakIntervalMs(), manual)
+                    .withPercentiles(tickMonitor.p95Mspt(), tickMonitor.p99Mspt()));
+            return true;
+        }
         return scanner.startScan(tickMonitor.tps(), tickMonitor.averageMspt(),
                 tickMonitor.peakIntervalMs(), manual,
                 // Percentiles are attached here rather than inside the scan: the analysis code has

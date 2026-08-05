@@ -59,11 +59,21 @@ running Java 8.
 
 Both ends were tested on real servers: Paper 1.16.5 on Java 11, and Paper 1.21.10 on Java 21.
 
-**Folia is not supported.** Folia ticks each region of the world on its own thread, which removes
-the two things this plugin is built on: one main thread that Bukkit calls can be made from, and
-one tick time that describes the whole server. Rather than report numbers it cannot measure,
-TickSentry notices Folia, explains itself in the console, and shuts down. Paper and Spigot are
-unaffected.
+**Folia runs in limited mode.** Folia ticks each region of the world on its own thread, so no single
+thread may read the whole world. That rules out the chunk scan, and with it everything the scan
+feeds: an alert there can name a plugin or memory, but never a chunk, a farm or an owner. Automatic
+clean-up is off for the same reason.
+
+Everything that never needed one main thread still works: memory and garbage collector watching,
+per-plugin event handler timings, the incident history, the web panel, Discord and in-game alerts.
+The startup log spells out which half you are getting, and `/lagwatch status` says so too.
+
+Nothing about that mode is assumed from the name "Folia" - whether the server will report a tick time
+is discovered by asking it. A fork that answers gets monitored; one that refuses is told so rather
+than shown a comforting number nobody measured.
+
+This mode is written against Folia's published scheduler API but has **not** been tested on a live
+Folia server. If you run one, the startup log is the thing to read - and an issue report is welcome.
 
 ## Commands
 

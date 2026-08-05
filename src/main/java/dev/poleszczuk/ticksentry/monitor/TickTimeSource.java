@@ -44,6 +44,17 @@ public final class TickTimeSource {
     private boolean primed;
 
     /**
+     * False once this server has refused to give a tick time at all.
+     *
+     * <p>Both readings are optional in practice. A fork can throw
+     * {@code UnsupportedOperationException} from either, and on a server that ticks regions
+     * independently there may be no single tick time to give. When that happens the honest answer is
+     * that this plugin cannot monitor here - not a stack trace twenty times a second, and certainly
+     * not a comforting number nobody measured.</p>
+     */
+    private boolean usable = true;
+
+    /**
      * @param server server to read tick times from
      */
     public TickTimeSource(Server server) {
@@ -87,6 +98,15 @@ public final class TickTimeSource {
         return tickTimes != null;
     }
 
+    /**
+     * @return whether this server gives tick times at all. Once it has refused, nothing more is
+     *         asked of it and the plugin says monitoring is unavailable rather than inventing a
+     *         number.
+     */
+    public boolean isUsable() {
+        return usable;
+    }
+
     /** @return one line for {@code /lagwatch status}, naming which reading is in use */
     public String describe() {
         return isRaw()
@@ -104,10 +124,17 @@ public final class TickTimeSource {
      * @param samples window to append to
      */
     public void drainInto(TickSamples samples) {
+        if (!usable) {
+            return;
+        }
         long[] raw = readRaw();
         if (raw == null) {
             // Spigot: one pre-averaged reading per tick is the best available.
-            samples.add(server.getAverageTickTime());
+            try {
+                samples.add(server.getAverageTickTime());
+            } catch (RuntimeException | LinkageError ex) {
+                usable = false;
+            }
             return;
         }
 

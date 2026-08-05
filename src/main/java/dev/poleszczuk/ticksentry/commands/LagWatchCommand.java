@@ -135,7 +135,13 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
 
         header(sender, msg("command.section.status"));
         sender.sendMessage(msg("status.monitoring", "state",
-                msg(monitor.isRunning() ? "status.monitoring-running" : "status.monitoring-stopped")));
+                msg(monitor.isRunning() && monitor.hasReadings()
+                        ? "status.monitoring-running" : "status.monitoring-stopped")));
+        if (!plugin.worldScanAllowed()) {
+            // Otherwise the first thing an admin does on Folia is wonder why every report says no
+            // chunk stands out.
+            sender.sendMessage(msg("status.limited-mode"));
+        }
         sender.sendMessage(msg("status.tps",
                 "colour", healthColor(monitor.tps() >= 19.0D, monitor.tps() >= 17.0D).toString(),
                 "tps", String.format(Locale.ROOT, "%.2f", monitor.tps())));

@@ -62,6 +62,9 @@ public final class TickMonitor implements Runnable {
     private long incidentStartMillis = -1L;
     private long recoveryStartMillis = -1L;
 
+    private double lastTps = 20.0D;
+    private boolean tpsUnavailable;
+
     /**
      * @param plugin         plugin instance (used for the scheduler)
      * @param config         source of thresholds and time windows
@@ -279,10 +282,32 @@ public final class TickMonitor implements Runnable {
         return intervals.max();
     }
 
-    /** @return one-minute TPS, capped at 20.0 */
+    /**
+     * @return one-minute TPS, capped at 20.0
+     *
+     * <p>Guarded, because {@code getTPS()} is not universal either: a server that ticks regions
+     * independently has no single figure to give, and a fork may refuse outright. The last reading
+     * stands in, and {@link #hasReadings()} is what tells the rest of the plugin whether any of
+     * this means anything.</p>
+     */
     public double tps() {
-        double[] tps = server.getTPS();
-        return tps.length == 0 ? 20.0D : Math.min(20.0D, tps[0]);
+        try {
+            double[] tps = server.getTPS();
+            if (tps.length > 0) {
+                lastTps = Math.min(20.0D, tps[0]);
+            }
+        } catch (RuntimeException | LinkageError ex) {
+            tpsUnavailable = true;
+        }
+        return lastTps;
+    }
+
+    /**
+     * @return whether this server gives measurements the monitor can act on. When false, nothing
+     *         here is worth reporting and the plugin says so rather than showing a made-up 20 TPS.
+     */
+    public boolean hasReadings() {
+        return tickTimeSource.isUsable() && !tpsUnavailable;
     }
 
     /** @return how long (in seconds) the MSPT threshold has been continuously exceeded; 0 when healthy */

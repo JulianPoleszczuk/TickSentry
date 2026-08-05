@@ -67,6 +67,9 @@ status:
   monitoring: "&7Monitoring: {state}"
   monitoring-running: "&arunning"
   monitoring-stopped: "&cstopped"
+  # Shown on Folia, where each region ticks on its own thread and no single thread may read the
+  # whole world - so alerts can name a plugin or memory, but never a chunk.
+  limited-mode: "&eLimited mode: no chunk scan on this server - see the startup log."
   # {colour} {tps}
   tps: "&7TPS: {colour}{tps}&8 / 20"
   # {colour} {mspt} {threshold}
