@@ -163,6 +163,15 @@ server cannot keep up and players feel it.
 **TPS** is the same thing seen from the other side: how many rounds fit into one second. 20 is
 perfect. Below 18 people start noticing.
 
+**p95 and p99** are the tick times your bad ticks reach. If the average is 20 ms but p99 is 400 ms,
+one tick in a hundred is freezing the server for almost half a second - which players feel as
+stuttering even though the average looks fine. An average can only tell you the server is
+*generally* behind; these tell you it is occasionally stopping dead.
+
+On Paper these come from the real duration of every individual tick. Spigot does not expose that -
+all it offers is an average of its own - so there TickSentry says so in `/lagwatch status` rather
+than reporting percentiles it cannot actually measure.
+
 ### A threshold that fits your server
 
 A fixed 50 ms suits the average server and nobody else. A box that habitually runs at 45 ms gets

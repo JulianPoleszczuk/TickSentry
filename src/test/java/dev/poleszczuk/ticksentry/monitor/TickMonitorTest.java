@@ -182,13 +182,44 @@ class TickMonitorTest {
         // has to be noticed.
         Harness harness = new Harness(() -> {
             throw new IllegalStateException("webhook exploded");
-        });
+        }, true);
         harness.lag();
         harness.advance(10_000L);
 
         harness.tick();
 
         assertTrue(harness.monitor.isInIncident());
+    }
+
+    @Test
+    void aServerWithoutPerTickTimesIsStillWatched() {
+        // Spigot has no getTickTimes(). Detection has to keep working there, on the one reading it
+        // does offer, rather than silently measuring nothing.
+        Harness harness = Harness.spigot();
+        harness.lag();
+
+        harness.advance(10_000L);
+        harness.tick();
+
+        assertEquals(1, harness.alerts);
+        assertFalse(harness.monitor.tickTimeSource().isRaw());
+    }
+
+    @Test
+    void aFreezeAmongHealthyTicksShowsInThePercentilesAndNotInTheMean() {
+        // The whole point of reading raw per-tick times. One 400 ms stall in a window of otherwise
+        // healthy ticks leaves the mean far below the threshold - so no alert, correctly, for a
+        // single hiccup - but the admin can now see that it happened at all.
+        Harness harness = new Harness();
+        harness.calm();
+
+        harness.mspt(400.0D);
+        harness.tick();
+
+        assertTrue(harness.monitor.averageMspt() < 50.0D, "one bad tick is not a lagging server");
+        assertEquals(400.0D, harness.monitor.worstTickMs(), 0.001D);
+        assertEquals(400.0D, harness.monitor.p99Mspt(), 0.001D);
+        assertEquals(0, harness.alerts);
     }
 
     @Test
@@ -202,21 +233,34 @@ class TickMonitorTest {
         assertEquals(300L, harness.monitor.alertCooldownRemainingSeconds());
     }
 
-    /** A monitor wired to a hand-cranked clock and a stand-in server. */
+    /**
+     * A monitor wired to a hand-cranked clock and a stand-in server.
+     *
+     * <p>The server hands out raw per-tick durations, which is what Paper does and therefore what
+     * nearly every server running this plugin does. Each simulated tick writes into the next slot
+     * of the ring, exactly as the real one does.</p>
+     */
     private static final class Harness {
 
         private final AtomicLong now = new AtomicLong(1_700_000_000_000L);
         private final TickMonitor monitor;
         private final List<Long> recoveries = new ArrayList<>();
+
+        /** Paper's ring of tick durations in nanoseconds, or {@code null} to act like Spigot. */
+        private final long[] ticks;
+
+        private int slot;
+        private long sequence;
         private double mspt;
         private int alerts;
 
         private Harness() {
-            this(null);
+            this(null, true);
         }
 
-        private Harness(Runnable onAlert) {
-            Server server = fakeServer(() -> mspt);
+        private Harness(Runnable onAlert, boolean raw) {
+            this.ticks = raw ? new long[WINDOW * 2] : null;
+            Server server = fakeServer(() -> mspt, ticks);
             Plugin plugin = fakePlugin(server);
             this.monitor = new TickMonitor(plugin, new Settings(),
                     new AdaptiveThreshold(AdaptiveSettings.disabled(), 5),
@@ -228,6 +272,11 @@ class TickMonitorTest {
                     },
                     recoveries::add,
                     now::get);
+        }
+
+        /** A monitor on a server with no per-tick durations, the way Spigot behaves. */
+        private static Harness spigot() {
+            return new Harness(null, false);
         }
 
         private void mspt(double value) {
@@ -246,23 +295,36 @@ class TickMonitorTest {
          * deliberately not advanced, which keeps the breach starting at a known instant.</p>
          */
         private void lag() {
-            mspt(200.0D);
-            tick(WINDOW);
+            fill(200.0D);
         }
 
         /** Fills the whole window with a healthy reading - same reasoning as {@link #lag()}. */
         private void calm() {
-            mspt(5.0D);
-            tick(WINDOW);
+            fill(5.0D);
+        }
+
+        /** One extra tick on the raw path, whose first drain only takes a priming snapshot. */
+        private void fill(double milliseconds) {
+            mspt(milliseconds);
+            tick(ticks == null ? WINDOW : WINDOW + 1);
         }
 
         private void tick() {
+            if (ticks != null) {
+                // Every tick lands in the next slot of the ring. The nanosecond count carries a
+                // monotonic counter so no two ticks are ever written with the same value: real tick
+                // times do not repeat, and the source spots a new measurement by the value having
+                // changed. Writing 200 ms twice into the same slot would look like nothing
+                // happened - a property of the fake, not of any real server.
+                slot = (slot + 1) % ticks.length;
+                ticks[slot] = (long) (mspt * 1_000_000.0D) + (++sequence);
+            }
             monitor.run();
         }
 
         private void tick(int times) {
             for (int i = 0; i < times; i++) {
-                monitor.run();
+                tick();
             }
         }
     }
@@ -296,13 +358,15 @@ class TickMonitorTest {
         }
     }
 
-    /** A server that answers only what the monitor asks it: the tick time and the TPS. */
-    private static Server fakeServer(java.util.function.DoubleSupplier mspt) {
+    /** A server that answers only what the monitor asks it: the tick times and the TPS. */
+    private static Server fakeServer(java.util.function.DoubleSupplier mspt, long[] tickTimes) {
         return (Server) Proxy.newProxyInstance(
                 TickMonitorTest.class.getClassLoader(),
                 new Class<?>[] {Server.class},
                 (self, method, args) -> {
                     switch (method.getName()) {
+                        case "getTickTimes":
+                            return tickTimes;
                         case "getAverageTickTime":
                             return mspt.getAsDouble();
                         case "getTPS":

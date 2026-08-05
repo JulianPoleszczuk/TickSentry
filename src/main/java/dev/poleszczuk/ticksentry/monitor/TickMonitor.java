@@ -11,11 +11,16 @@ import java.util.function.LongSupplier;
 /**
  * Measures server health every tick and reports sustained overload.
  *
- * <p>MSPT comes from {@link Server#getAverageTickTime()} - the actual tick execution time
- * (a healthy server sits at 5-25 ms). The gap between task invocations, measured with
- * {@code System.nanoTime()}, is tracked separately to catch momentary freezes: on a healthy
- * server that gap is always ~50 ms, so it makes a useless alert threshold, but its peak value
- * shows nicely how bad the worst stall in the window was.</p>
+ * <p>Tick times come from {@link TickTimeSource} - real per-tick durations on Paper, the server's
+ * own pre-averaged reading on Spigot, which is all Spigot offers. They land in a rolling window
+ * that reports both a mean and percentiles, because the two answer different questions: the mean
+ * says whether the server is generally behind, p95 says how bad its bad ticks are. A server
+ * averaging 25 ms with a p99 of 400 ms is not healthy, and the mean alone would call it so.</p>
+ *
+ * <p>The gap between task invocations, measured with {@code System.nanoTime()}, is tracked
+ * separately. It cannot tell 5 ms from 45 ms - the server sleeps out the difference - so it makes a
+ * useless threshold, but it catches time that passes <em>between</em> ticks and never appears in any
+ * tick's duration, which is exactly what a stop-the-world pause looks like.</p>
  */
 public final class TickMonitor implements Runnable {
 
@@ -39,10 +44,13 @@ public final class TickMonitor implements Runnable {
      */
     private final LongSupplier clock;
 
-    private double[] msptSamples;
-    private double[] intervalSamples;
-    private int cursor;
-    private int filled;
+    private final TickTimeSource tickTimeSource;
+
+    /** Tick durations - what the threshold is compared against. */
+    private TickSamples tickTimes;
+
+    /** Wall-clock gaps between our own invocations - the freeze gauge. */
+    private TickSamples intervals;
 
     private long lastTickNanos;
     private long breachStartMillis = -1L;
@@ -82,7 +90,13 @@ public final class TickMonitor implements Runnable {
         this.onSustainedLag = onSustainedLag;
         this.onRecovered = onRecovered;
         this.clock = clock;
+        this.tickTimeSource = new TickTimeSource(this.server);
         resizeWindow();
+    }
+
+    /** @return where tick times are being read from, for {@code /lagwatch status} */
+    public TickTimeSource tickTimeSource() {
+        return tickTimeSource;
     }
 
     /** Starts measuring - a synchronous task running every tick. */
@@ -111,6 +125,7 @@ public final class TickMonitor implements Runnable {
      */
     public void reset() {
         resizeWindow();
+        tickTimeSource.reset();
         lastTickNanos = 0L;
         breachStartMillis = -1L;
         recoveryStartMillis = -1L;
@@ -119,21 +134,13 @@ public final class TickMonitor implements Runnable {
     @Override
     public void run() {
         long now = System.nanoTime();
-        if (lastTickNanos != 0L) {
-            intervalSamples[cursor] = (now - lastTickNanos) / 1_000_000.0D;
-        } else {
-            intervalSamples[cursor] = TARGET_TICK_MS;
-        }
+        intervals.add(lastTickNanos == 0L ? TARGET_TICK_MS : (now - lastTickNanos) / 1_000_000.0D);
         lastTickNanos = now;
 
-        msptSamples[cursor] = server.getAverageTickTime();
-        cursor = (cursor + 1) % msptSamples.length;
-        if (filled < msptSamples.length) {
-            filled++;
-        }
+        tickTimeSource.drainInto(tickTimes);
 
-        // Until the window is full the average means little - for example right after startup.
-        if (filled < msptSamples.length) {
+        // Until the window is full the readings mean little - right after startup most of all.
+        if (!tickTimes.isFull()) {
             return;
         }
         evaluate();
@@ -225,23 +232,27 @@ public final class TickMonitor implements Runnable {
 
     /** @return rolling average MSPT over the sample window, in milliseconds */
     public double averageMspt() {
-        if (filled == 0) {
-            return 0.0D;
-        }
-        double sum = 0.0D;
-        for (int i = 0; i < filled; i++) {
-            sum += msptSamples[i];
-        }
-        return sum / filled;
+        return tickTimes.mean();
+    }
+
+    /** @return 95th percentile tick time in the window - how bad this server's bad ticks are */
+    public double p95Mspt() {
+        return tickTimes.p95();
+    }
+
+    /** @return 99th percentile tick time in the window */
+    public double p99Mspt() {
+        return tickTimes.p99();
+    }
+
+    /** @return the single worst tick in the window, in milliseconds */
+    public double worstTickMs() {
+        return tickTimes.max();
     }
 
     /** @return longest gap between ticks in the sample window, in milliseconds */
     public double peakIntervalMs() {
-        double peak = 0.0D;
-        for (int i = 0; i < filled; i++) {
-            peak = Math.max(peak, intervalSamples[i]);
-        }
-        return peak;
+        return intervals.max();
     }
 
     /** @return one-minute TPS, capped at 20.0 */
@@ -269,9 +280,7 @@ public final class TickMonitor implements Runnable {
 
     private void resizeWindow() {
         int size = config.rollingAverageTicks();
-        this.msptSamples = new double[size];
-        this.intervalSamples = new double[size];
-        this.cursor = 0;
-        this.filled = 0;
+        this.tickTimes = new TickSamples(size);
+        this.intervals = new TickSamples(size);
     }
 }
