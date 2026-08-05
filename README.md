@@ -309,6 +309,23 @@ eighty plugins would quietly multiply it.
 
 Set `metrics: false` under `dashboard` to turn the endpoint off and keep only the page.
 
+### Health checks
+
+`/healthz` needs no token and answers one word, so an uptime monitor can watch it:
+
+```
+$ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/healthz
+200
+```
+
+It returns 503 once the main thread stops taking measurements - a deadlock, a stop-the-world pause
+that never ended, a crash part-way through shutdown. That is worth having separately from "does the
+port answer", because this web server runs on its own threads and will keep answering cheerfully
+long after the game itself has stopped.
+
+Lag is not unhealthy here. A laggy server is still up, the alerts already cover it, and paging
+somebody at three in the morning for a mob farm is not what an uptime monitor is for.
+
 ## Translating what players see
 
 `plugins/TickSentry/messages.yml` holds the text that appears **in chat**: the lag warning, the

@@ -80,6 +80,11 @@ public final class LiveSnapshot {
         return generatedAt;
     }
 
+    /** @return whether the tick monitor was running when this was taken */
+    public boolean monitoring() {
+        return monitoring;
+    }
+
     /**
      * Serialises the snapshot to JSON.
      *

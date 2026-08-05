@@ -77,6 +77,14 @@ public final class DashboardServer {
     /** Never more than one line per this many milliseconds, so a scanner cannot fill the log. */
     private static final long REJECTION_LOG_INTERVAL_MILLIS = 60_000L;
 
+    /**
+     * How old a snapshot has to be before {@code /healthz} calls the server unavailable.
+     *
+     * <p>The main thread takes one every five seconds, so this is six missed in a row - long enough
+     * that a bad couple of seconds cannot trip it, short enough to notice a hang.</p>
+     */
+    private static final long STALE_SNAPSHOT_MILLIS = 30_000L;
+
     private final AtomicInteger rejections = new AtomicInteger();
     private final AtomicLong lastRejectionLogMillis = new AtomicLong();
 
@@ -114,6 +122,7 @@ public final class DashboardServer {
             server.createContext("/", this::handlePage);
             server.createContext("/api/live", exchange -> handleApi(exchange, this::liveJson));
             server.createContext("/api/incidents", exchange -> handleApi(exchange, () -> incidentsJson));
+            server.createContext("/healthz", this::handleHealth);
             if (metricsEnabled) {
                 server.createContext("/metrics", this::handleMetrics);
             }
@@ -133,6 +142,8 @@ public final class DashboardServer {
                 plugin.getLogger().info("Prometheus metrics: http://" + bind + ":" + port
                         + "/metrics - same token, as ?token= or an X-Auth-Token header.");
             }
+            plugin.getLogger().info("Health check: http://" + bind + ":" + port
+                    + "/healthz - no token, answers 200 while the main thread is alive.");
             plugin.getLogger().fine("Panel URL including the token: http://" + bind + ":" + port
                     + "/?token=" + token);
             return true;
@@ -213,6 +224,32 @@ public final class DashboardServer {
                 + " request(s) for a missing or wrong token, most recently from "
                 + exchange.getRemoteAddress().getAddress().getHostAddress()
                 + ". If that is not you, something is scanning this port.");
+    }
+
+    /**
+     * Serves the health check: 200 while the server's main thread is alive, 503 when it is not.
+     *
+     * <p>Unauthenticated, and deliberately says nothing beyond that one word. An uptime monitor
+     * cannot carry a secret, and the endpoint gives away nothing the 401 on every other path does
+     * not already give away.</p>
+     *
+     * <p>What it actually checks is the age of the snapshot. Snapshots are taken by the main thread
+     * every few seconds, so a stale one means the main thread has stopped taking them - a deadlock,
+     * a stop-the-world pause that never ended, a crash mid-shutdown. That is the outage worth
+     * paging somebody about, and it is invisible to anything that only checks whether the port
+     * still answers, because this HTTP server has its own threads and will answer cheerfully long
+     * after the game has stopped.</p>
+     *
+     * <p>Lag is deliberately <b>not</b> unhealthy here. A laggy server is still up, alerts already
+     * cover it, and returning 503 for it would have uptime monitors paging for something that is
+     * not an outage.</p>
+     */
+    private void handleHealth(HttpExchange exchange) throws IOException {
+        LiveSnapshot current = snapshot;
+        long age = System.currentTimeMillis() - current.generatedAt();
+        boolean healthy = current.monitoring() && age < STALE_SNAPSHOT_MILLIS;
+        respond(exchange, healthy ? 200 : 503, "text/plain; charset=utf-8",
+                healthy ? "ok\n" : "unavailable\n");
     }
 
     /** Builds the {@code /api/live} response: current state plus chart points. */
