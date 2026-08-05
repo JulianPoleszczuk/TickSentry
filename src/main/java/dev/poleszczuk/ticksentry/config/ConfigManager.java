@@ -39,6 +39,7 @@ public final class ConfigManager implements MonitorSettings {
     private volatile int sustainedSeconds;
     private volatile int scanCooldownSeconds;
     private volatile int rollingAverageTicks;
+    private volatile TriggerMetric triggerOn = TriggerMetric.AVERAGE;
 
     private volatile boolean discordEnabled;
     private volatile String webhookUrl;
@@ -91,6 +92,16 @@ public final class ConfigManager implements MonitorSettings {
         this.sustainedSeconds = Math.max(1, cfg.getInt("monitor.sustained-seconds", 10));
         this.scanCooldownSeconds = Math.max(0, cfg.getInt("monitor.scan-cooldown-seconds", 300));
         this.rollingAverageTicks = Math.min(6000, Math.max(20, cfg.getInt("monitor.rolling-average-ticks", 100)));
+
+        String trigger = cfg.getString("monitor.trigger-on", TriggerMetric.AVERAGE.configName());
+        TriggerMetric parsed = TriggerMetric.parse(trigger);
+        if (parsed == null) {
+            // A typo here decides whether the server is watched at all, so it does not pass quietly.
+            plugin.getLogger().warning("monitor.trigger-on is '" + trigger
+                    + "', which is not average, p95 or p99 - using average.");
+            parsed = TriggerMetric.AVERAGE;
+        }
+        this.triggerOn = parsed;
         this.recoveryAlert = cfg.getBoolean("monitor.recovery-alert", true);
         this.recoverySeconds = Math.max(1, cfg.getInt("monitor.recovery-seconds", 15));
         this.inGameAlerts = cfg.getBoolean("monitor.in-game-alerts", true);
@@ -284,6 +295,12 @@ public final class ConfigManager implements MonitorSettings {
     @Override
     public int rollingAverageTicks() {
         return rollingAverageTicks;
+    }
+
+    /** @return which reading of the window the threshold is compared against */
+    @Override
+    public TriggerMetric triggerOn() {
+        return triggerOn;
     }
 
     /** @return whether Discord alerts are enabled and properly configured */

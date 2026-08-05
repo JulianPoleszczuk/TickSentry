@@ -66,6 +66,9 @@ status:
   tps: "&7TPS: {colour}{tps}&8 / 20"
   # {colour} {mspt} {threshold}
   mspt: "&7Tick time: {colour}{mspt} ms&8 (threshold: {threshold} ms)"
+  # Shown only when monitor.trigger-on is not 'average', so the tick time line above is not read
+  # as the number being watched. {metric} {value}
+  trigger-on: "&7Watching: &f{metric}&8 (currently {value} ms)"
   # The tick times your bad ticks reach. An average of 20 ms with a p99 of 400 ms is a server that
   # stutters, and the average alone would call it healthy. {colour} {p95} {p99} {worst}
   percentiles: "&7Bad ticks: {colour}p95 {p95} ms&7, p99 &f{p99} ms&8 (worst single tick {worst} ms)"

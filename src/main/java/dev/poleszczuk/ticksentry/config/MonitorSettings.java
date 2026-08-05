@@ -25,4 +25,7 @@ public interface MonitorSettings {
 
     /** @return size of the rolling MSPT window, in ticks */
     int rollingAverageTicks();
+
+    /** @return which reading of the window the threshold is compared against */
+    TriggerMetric triggerOn();
 }

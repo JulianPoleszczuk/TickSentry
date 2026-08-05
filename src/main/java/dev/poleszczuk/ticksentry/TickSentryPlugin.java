@@ -574,7 +574,9 @@ public final class TickSentryPlugin extends JavaPlugin {
         memoryWatcher.poll();
         chunkLoadRate.rotate();
         if (!tickMonitor.isInIncident()) {
-            adaptiveThreshold.record(tickMonitor.averageMspt(), configManager.msptThresholdMs());
+            // The reading the threshold is compared against, not the average: a baseline learned
+            // from means and then compared against a p99 would sit permanently too low.
+            adaptiveThreshold.record(tickMonitor.triggerMspt(), configManager.msptThresholdMs());
         }
     }
 

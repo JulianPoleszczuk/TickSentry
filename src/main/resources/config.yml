@@ -12,6 +12,21 @@ monitor:
   scan-cooldown-seconds: 300
   # How many recent ticks the rolling average covers.
   rolling-average-ticks: 100
+
+  # Which reading of that window the threshold above is compared against.
+  #
+  #   average  What it has always been. Answers "is this server generally behind". It is also deaf
+  #            to the complaint you actually get, because a server freezing for 300 ms twice a
+  #            second still averages out below 50 ms and never says a word.
+  #   p95      "How bad are the bad ticks." One tick in twenty is at least this slow. Catches the
+  #            stutter an average hides. This is the one to try if players report lag that your
+  #            graphs deny.
+  #   p99      Nearly the worst single tick of the last five seconds. Alerts on a server that
+  #            stalls every few seconds - a real problem, but a much sharper instrument than p95.
+  #
+  # Left on average on purpose: switching a server that has been quiet for months onto p95 will
+  # start finding things, and that should be your decision rather than a surprise from an update.
+  trigger-on: average
   # Send a separate message once the server recovers?
   recovery-alert: true
   # How many seconds below the threshold mean the lag is over.

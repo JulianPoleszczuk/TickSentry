@@ -172,6 +172,19 @@ On Paper these come from the real duration of every individual tick. Spigot does
 all it offers is an average of its own - so there TickSentry says so in `/lagwatch status` rather
 than reporting percentiles it cannot actually measure.
 
+By default the alert still fires on the average, which is what it has always done. If players report
+lag that your graphs deny, point the threshold at a percentile instead:
+
+```yaml
+monitor:
+  trigger-on: p95   # average (default), p95, or p99
+```
+
+`p95` is the one to reach for. `p99` on a 100-tick window is very nearly the worst single tick of the
+last five seconds, so it will alert on a server that stalls every few seconds - a real problem, but a
+much sharper instrument. Left on `average` on purpose: switching a quiet server to `p95` will start
+finding things, and that should be your decision rather than a surprise from an update.
+
 ### A threshold that fits your server
 
 A fixed 50 ms suits the average server and nobody else. A box that habitually runs at 45 ms gets
@@ -540,7 +553,7 @@ thread, so the scan is spread over several ticks with a 3 ms budget each - other
 would cause the very lag it looks for. And anything slow (network, database) must stay off the
 main thread.
 
-Run the tests with `./gradlew test`. There are 207 of them, and none needs a running server.
+Run the tests with `./gradlew test`. There are 234 of them, and none needs a running server.
 
 Most cover the pure decision-making. Three files cover the parts that have to touch Bukkit, because
 those are the ones that can damage somebody else's server - or, in the monitor's case, quietly fail

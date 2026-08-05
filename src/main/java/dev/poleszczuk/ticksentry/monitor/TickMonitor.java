@@ -149,7 +149,7 @@ public final class TickMonitor implements Runnable {
     /** Checks whether the threshold has been exceeded long enough and fires an alert if so. */
     private void evaluate() {
         long nowMillis = clock.getAsLong();
-        if (averageMspt() <= thresholdMs()) {
+        if (triggerMspt() <= thresholdMs()) {
             breachStartMillis = -1L;
             checkRecovery(nowMillis);
             return;
@@ -233,6 +233,26 @@ public final class TickMonitor implements Runnable {
     /** @return rolling average MSPT over the sample window, in milliseconds */
     public double averageMspt() {
         return tickTimes.mean();
+    }
+
+    /**
+     * @return the reading the threshold is actually compared against, which is the average unless
+     *         the admin asked for a percentile
+     *
+     * <p>The adaptive threshold has to be fed this same reading rather than the average. Otherwise
+     * it would learn what this server's mean tick time normally is and then have that baseline
+     * compared against its p99, which is always higher - a threshold permanently too low.</p>
+     */
+    public double triggerMspt() {
+        switch (config.triggerOn()) {
+            case P95:
+                return tickTimes.p95();
+            case P99:
+                return tickTimes.p99();
+            case AVERAGE:
+            default:
+                return tickTimes.mean();
+        }
     }
 
     /** @return 95th percentile tick time in the window - how bad this server's bad ticks are */

@@ -1,6 +1,7 @@
 package dev.poleszczuk.ticksentry.commands;
 
 import dev.poleszczuk.ticksentry.TickSentryPlugin;
+import dev.poleszczuk.ticksentry.config.TriggerMetric;
 import dev.poleszczuk.ticksentry.monitor.AdaptiveThreshold;
 import dev.poleszczuk.ticksentry.monitor.ChunkStat;
 import dev.poleszczuk.ticksentry.monitor.LagCategory;
@@ -125,6 +126,13 @@ public final class LagWatchCommand implements CommandExecutor, TabCompleter {
                 "colour", healthColor(mspt <= threshold * 0.6D, mspt <= threshold).toString(),
                 "mspt", String.format(Locale.ROOT, "%.1f", mspt),
                 "threshold", String.format(Locale.ROOT, "%.0f", threshold)));
+        TriggerMetric trigger = plugin.configManager().triggerOn();
+        if (trigger != TriggerMetric.AVERAGE) {
+            // Otherwise the line above reads as the number being watched when it is not.
+            sender.sendMessage(msg("status.trigger-on",
+                    "metric", trigger.configName(),
+                    "value", String.format(Locale.ROOT, "%.0f", monitor.triggerMspt())));
+        }
         // The average says whether the server is generally behind; the percentiles say how bad its
         // bad ticks get. A server averaging 20 ms with a p99 of 400 ms stutters, and only one of
         // those two numbers shows it.

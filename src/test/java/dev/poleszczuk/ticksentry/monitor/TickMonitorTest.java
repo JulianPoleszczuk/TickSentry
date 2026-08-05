@@ -2,6 +2,7 @@ package dev.poleszczuk.ticksentry.monitor;
 
 import dev.poleszczuk.ticksentry.config.AdaptiveSettings;
 import dev.poleszczuk.ticksentry.config.MonitorSettings;
+import dev.poleszczuk.ticksentry.config.TriggerMetric;
 import org.bukkit.Server;
 import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.Test;
@@ -223,6 +224,46 @@ class TickMonitorTest {
     }
 
     @Test
+    void triggeringOnAPercentileCatchesStutterTheAverageMisses() {
+        // The same server, the same ticks, two settings. Every fourth tick freezes for 300 ms and
+        // the rest are healthy: the mean lands at 78 ms so both would fire here, but the point is
+        // that p95 reports 300 while the mean reports 78 - so on a server whose freezes are rarer,
+        // only the percentile is still above the threshold.
+        Harness harness = new Harness(null, true, TriggerMetric.P95);
+        harness.mspt(5.0D);
+        harness.tick(WINDOW + 1);
+        for (int i = 0; i < WINDOW; i++) {
+            harness.mspt(i % 4 == 0 ? 300.0D : 5.0D);
+            harness.tick();
+        }
+
+        assertTrue(harness.monitor.p95Mspt() > 50.0D, "the bad ticks are far over the threshold");
+        assertEquals(harness.monitor.p95Mspt(), harness.monitor.triggerMspt(), 0.001D);
+
+        harness.advance(10_000L);
+        harness.tick();
+
+        assertEquals(1, harness.alerts);
+    }
+
+    @Test
+    void aRareFreezeMovesThePercentileWithoutMovingTheAverage() {
+        // One freeze in twenty ticks. p95 is 300 ms, the mean is under 20 - so a server configured
+        // on the average sees nothing at all, which is the whole reason the setting exists.
+        Harness onAverage = new Harness(null, true, TriggerMetric.AVERAGE);
+        onAverage.calm();
+        onAverage.mspt(300.0D);
+        onAverage.tick();
+
+        assertTrue(onAverage.monitor.averageMspt() < 50.0D);
+        assertEquals(onAverage.monitor.averageMspt(), onAverage.monitor.triggerMspt(), 0.001D);
+
+        onAverage.advance(10_000L);
+        onAverage.tick();
+        assertEquals(0, onAverage.alerts, "the average never notices");
+    }
+
+    @Test
     void markAlertSentPushesTheCooldownBack() {
         Harness harness = new Harness();
         harness.calm();
@@ -259,10 +300,14 @@ class TickMonitorTest {
         }
 
         private Harness(Runnable onAlert, boolean raw) {
+            this(onAlert, raw, TriggerMetric.AVERAGE);
+        }
+
+        private Harness(Runnable onAlert, boolean raw, TriggerMetric triggerOn) {
             this.ticks = raw ? new long[WINDOW * 2] : null;
             Server server = fakeServer(() -> mspt, ticks);
             Plugin plugin = fakePlugin(server);
-            this.monitor = new TickMonitor(plugin, new Settings(),
+            this.monitor = new TickMonitor(plugin, new Settings(triggerOn),
                     new AdaptiveThreshold(AdaptiveSettings.disabled(), 5),
                     () -> {
                         alerts++;
@@ -331,6 +376,17 @@ class TickMonitorTest {
 
     /** The defaults from config.yml, with the smallest window the configuration permits. */
     private static final class Settings implements MonitorSettings {
+
+        private final TriggerMetric triggerOn;
+
+        private Settings(TriggerMetric triggerOn) {
+            this.triggerOn = triggerOn;
+        }
+
+        @Override
+        public TriggerMetric triggerOn() {
+            return triggerOn;
+        }
 
         @Override
         public double msptThresholdMs() {
