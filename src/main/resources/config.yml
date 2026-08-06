@@ -99,9 +99,10 @@ updates:
   # you in the console and in game. Nothing is ever downloaded or installed - you decide.
   check: true
   # Send anonymous usage statistics to bStats: server software and version, Java version,
-  # operating system, core count, player count, and which TickSentry features you have on.
-  # No addresses, no names, nothing about your world. It answers "which Minecraft versions
-  # still need supporting", which is otherwise guesswork.
+  # operating system and architecture, core count, player count, whether the server runs in
+  # online mode, and which TickSentry features you have on. No addresses, no names, nothing
+  # about your world. It answers "which Minecraft versions still need supporting", which is
+  # otherwise guesswork.
   #
   # The server-wide switch in plugins/bStats/config.yml is honoured too - turning bStats off
   # there turns it off here, whatever this says.

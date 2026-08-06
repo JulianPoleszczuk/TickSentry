@@ -41,7 +41,7 @@ Suggestion: Go there (/tp 1608 ~ 1608). Suspected farm: 841x cow.
 
 ## Install
 
-1. Download `TickSentry-1.0.0.jar` from [Releases](https://github.com/JulianPoleszczuk/TickSentry/releases), or build it yourself (below).
+1. Download the jar from [Releases](https://github.com/JulianPoleszczuk/TickSentry/releases), or build it yourself (below).
 2. Drop it into your server's `plugins` folder.
 3. Restart the server.
 

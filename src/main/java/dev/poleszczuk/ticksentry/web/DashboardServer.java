@@ -133,9 +133,11 @@ public final class DashboardServer {
             }));
             server.start();
 
-            // The token is deliberately kept out of the log. Admins are told to paste their
-            // console into bug reports, and a log line holding a working access token is how
-            // somebody ends up publishing one - especially after changing bind to 0.0.0.0.
+            // The token is kept out of the log entirely, at every level. Admins are told to paste
+            // their console into bug reports, and a log line holding a working access token is how
+            // somebody ends up publishing one - especially after changing bind to 0.0.0.0. Writing
+            // it at FINE only moved that risk to whoever turns debug logging on, which is exactly
+            // the admin already busy collecting output for somebody else to read.
             plugin.getLogger().info("Web panel: http://" + bind + ":" + port
                     + "/ - open it with the token from config.yml (dashboard.token).");
             if (metricsEnabled) {
@@ -144,8 +146,6 @@ public final class DashboardServer {
             }
             plugin.getLogger().info("Health check: http://" + bind + ":" + port
                     + "/healthz - no token, answers 200 while the main thread is alive.");
-            plugin.getLogger().fine("Panel URL including the token: http://" + bind + ":" + port
-                    + "/?token=" + token);
             return true;
         } catch (IOException | RuntimeException ex) {
             plugin.getLogger().log(Level.WARNING, "Could not start the web panel", ex);

@@ -1,10 +1,19 @@
 name: Build
 
+# Every branch, not just main: a feature branch that never opens a pull request would
+# otherwise reach main having never been built, and the Java 11 bytecode check below is
+# exactly the kind of breakage nobody notices by reading a diff.
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
   workflow_dispatch:
+
+# A push to a branch with an open pull request triggers both events. Superseded runs of the
+# same ref are pointless once a newer commit exists.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:

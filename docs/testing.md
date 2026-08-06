@@ -22,7 +22,7 @@ every feature checked along the way.
 You need a Paper 1.16.5+ server running on Java 11 or newer.
 
 1. Build the plugin: `./gradlew build`
-2. Copy `build/libs/TickSentry-1.0.0.jar` into the server's `plugins/` directory
+2. Copy the jar from `build/libs/` into the server's `plugins/` directory
 3. Start the server once and stop it - this creates `plugins/TickSentry/config.yml`
 
 ## Settings for the test run

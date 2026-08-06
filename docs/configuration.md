@@ -157,8 +157,9 @@ The update check reads the GitHub releases page once at startup. **Nothing is ev
 installed** - it tells you in the console, tells an admin who joins, and you decide.
 
 The statistics go to [bStats](https://bstats.org): server software and version, Java version,
-operating system, core count, player count, and which TickSentry features are switched on. No
-addresses, no names, nothing about your world. It exists to answer "which Minecraft versions still
+operating system and architecture, core count, player count, whether the server runs in online
+mode, and which TickSentry features are switched on. No addresses, no names, nothing about your
+world. It exists to answer "which Minecraft versions still
 need supporting", which is otherwise guesswork.
 
 The server-wide switch in `plugins/bStats/config.yml` is honoured as well - turning bStats off
