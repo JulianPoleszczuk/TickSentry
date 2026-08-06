@@ -3,6 +3,20 @@
 A step-by-step guide: from an empty server to having every feature verified.
 The whole run takes about 15 minutes.
 
+## The short version
+
+1. Set `sustained-seconds: 3` and run `/lagwatch reload`.
+2. Stand somewhere and spawn a cow: `/summon minecraft:cow ~ ~ ~`
+3. Run this about 11 times - it doubles the cows each time:
+   ```
+   /execute as @e[type=cow,distance=..10] at @s run summon minecraft:cow ~ ~ ~
+   ```
+4. Wait a few seconds. The alert should point at the exact chunk you are standing in.
+5. Clean up with `/kill @e[type=minecraft:cow]` and `/kill @e[type=minecraft:item]`.
+
+Put `sustained-seconds` back to 10 when you are done. The rest of this page is the same run with
+every feature checked along the way.
+
 ## Before you start
 
 You need a Paper 1.16.5+ server running on Java 11 or newer.
@@ -161,6 +175,7 @@ then run `/lagwatch reload`.
 
 ## What this test will not cover
 
-The plugin looks for lag **in the contents of the world**. It will not detect overload caused by
-another plugin, by world saving or by terrain generation - in those cases it reports the
-"No obvious source" category and suggests running spark. That is a deliberate limitation, not a bug.
+This walkthrough only exercises the chunk scan. It says nothing about the plugin profiler or the
+memory watcher, both of which react to things a pile of cows cannot produce - see
+[How it finds the cause](detection.md) for what each of the three looks at, and for the limits that
+are deliberate rather than bugs.
